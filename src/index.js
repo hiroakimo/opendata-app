@@ -683,9 +683,11 @@ async function datasetPage(env, key) {
   })();
 
   return html(page(d.title, `
+
 <h1>${esc(d.title)}</h1>
 <p class="mut">${esc(d.muni_name)}（${esc(d.muni_code)}）· ${esc(d.grain_label)} ·
    出典 ${d.source_url ? `<a href="${esc(d.source_url)}" rel="noreferrer">${esc(d.source_site)}</a>` : esc(d.source_site)}</p>
+<p><a class="btn" href="/analyze?dataset=${esc(d.dataset_key)}">集計・可視化を開く →</a></p>
 
 <h2>収録状況</h2>
 <p class="mut">${esc(d.period_from ?? "—")} 〜 ${esc(d.period_to ?? "—")} ／
