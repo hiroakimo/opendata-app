@@ -2,6 +2,10 @@
 main = "src/index.js"
 compatibility_date = "2026-08-01"
 
+[vars]
+AIG_ACCOUNT_ID = "e0a6739e7b8a94e272b76b9dc94a8efd"
+AIG_GATEWAY_ID = "opendata-app"
+
 [[d1_databases]]
 binding = "DB"
 database_name = "tokyo-population"
