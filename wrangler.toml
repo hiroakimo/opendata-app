@@ -1,0 +1,12 @@
+﻿name = "opendata-app"
+main = "src/index.js"
+compatibility_date = "2026-08-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "tokyo-population"
+database_id = "2084d9c3-0ef6-45e8-a353-6b05434b2896"
+
+[[r2_buckets]]
+binding = "LAKE"
+bucket_name = "opendata-lake"
