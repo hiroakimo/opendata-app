@@ -25,6 +25,12 @@
  *      if (r) return r;
  * ===================================================================== */
 
+import { callClaude, callClaudeJson, MODELS } from "./llm.js";
+import {
+  buildFacts, verifyNumbers,
+  SYS_FACT, SYS_INSIGHT, userFact, userInsight,
+} from "./insight.js";
+
 /* ---------------------------------------------------------------------
  *  D1バインディング
  *    wrangler.toml の binding 名が判らないので候補から拾う。
@@ -329,17 +335,7 @@ async function apiRanking(env, url) {
  * ------------------------------------------------------------------- */
 const isMonth = (s) => /^(0[1-9]|1[0-2])$/.test(s || "");
 
-async function apiSeasonality(env, url) {
-  const ds = await dataset(env, url.searchParams.get("dataset") || "");
-  if (!ds) return bad("データセットが見つかりません");
-
-  const mode = url.searchParams.get("mode") || "strength";
-  const key = url.searchParams.get("key_code") || "";
-  const month = url.searchParams.get("month") || "09";
-
-  if (mode !== "strength" && !isKey(key)) return bad("町丁を指定してください");
-  if (mode === "age" && !isMonth(month)) return bad("月の指定が不正です");
-
+async function seasonalityQuery(env, ds, mode, key, month) {
   /* 指数の読み方はモードによらず同じなので毎回付ける。
      数字だけが独り歩きすると、10年平均であることも
      住民票ベースであることも落ちてしまう。 */
@@ -402,6 +398,24 @@ async function apiSeasonality(env, url) {
     notes.push("該当する行がない。小規模な町丁や階級は算出対象から外れている可能性がある");
   }
 
+  return { sql, params, rows, notes };
+}
+
+/* 集計本体と、それを Response にする層を分ける。
+   要件5・6のエンドポイントが同じ集計を再利用するため。 */
+async function apiSeasonality(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const mode = url.searchParams.get("mode") || "strength";
+  const key = url.searchParams.get("key_code") || "";
+  const month = url.searchParams.get("month") || "09";
+  if (mode !== "strength" && !isKey(key)) return bad("町丁を指定してください");
+  if (mode === "age" && !isMonth(month)) return bad("月の指定が不正です");
+
+  const q = await seasonalityQuery(env, ds, mode, key, month);
+  const { sql, params, rows, notes } = q;
+
   /* 断絶・欠測は特定の期間ではなく指数そのものに効くので、
      ランキングのように期間で絞らず 2012-08 以降を全部渡す。 */
   const gaps = await getDb(env)
@@ -435,6 +449,159 @@ async function apiSeasonality(env, url) {
     notes,
     annotations: (gaps.results || []).filter((g) => g.kind !== "series_break"),
     issues: issues.results || [],
+  });
+}
+
+
+/* --- 要件5・6 事実の要約と示唆 ---------------------------------------
+ *
+ *  集計とは別のエンドポイントにしている。集計は数十msで返るのに
+ *  LLMは数秒かかるので、同じ応答に載せると表の描画まで待たされる。
+ *
+ *  流れ:
+ *    1. 季節変動と同じ集計を実行（決定論）
+ *    2. 順位・最大値・件数を JS で算出して事実の構造体を作る（決定論）
+ *    3. 要件5：構造体 → 事実の記述（LLM）
+ *    4. 出力の数値を検証。渡していない数値があれば表示しない
+ *    5. 要件6：要件5の出力 → 示唆（LLM）
+ *
+ *  LLMは行データに触れない。構造体だけを見る。
+ * ------------------------------------------------------------------- */
+async function apiInsight(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const mode = url.searchParams.get("mode") || "strength";
+  const key = url.searchParams.get("key_code") || "";
+  const month = url.searchParams.get("month") || "09";
+  if (mode !== "strength" && !isKey(key)) return bad("町丁を指定してください");
+  if (mode === "age" && !isMonth(month)) return bad("月の指定が不正です");
+
+  const q = await seasonalityQuery(env, ds, mode, key, month);
+  if (!q.rows.length) return json({ skipped: "対象データがありません" });
+
+  /* 対象の呼び名も決定論で作る。LLMに町丁名を組み立てさせない。 */
+  let scopeLabel = ds.muni_name + "全域";
+  if (mode !== "strength") {
+    const a = await getDb(env)
+      .prepare(`SELECT area_name FROM areas WHERE key_code = ?1`)
+      .bind(key).first();
+    scopeLabel = ds.muni_name + " " + (a ? a.area_name : key);
+  }
+
+  /* caveats はSQL側で確定させる。LLMに気づかせない。 */
+  const gaps = await getDb(env)
+    .prepare(
+      `SELECT reference_date, kind, reason
+         FROM dataset_gaps
+        WHERE dataset_key = ?1 AND reference_date >= '2012-08-01'
+        ORDER BY reference_date`
+    ).bind(ds.dataset_key).all();
+
+  const issues = await getDb(env)
+    .prepare(
+      `SELECT title FROM known_issues
+        WHERE dataset_key = ?1 AND resolved_at IS NULL ORDER BY issue_id`
+    ).bind(ds.dataset_key).all();
+
+  const caveats = [
+    "住民基本台帳の異動を集計したもので、実際の居住実態とは異なる場合がある",
+    "2012-08 の系列断絶以降のみを対象にしている",
+    "移動平均の窓に欠測を含む月は集計から除外しているため、暦月ごとに対象年数が異なる",
+  ];
+  (gaps.results || []).forEach((g) => {
+    if (g.kind !== "series_break") caveats.push(g.reference_date.slice(0, 7) + " は欠測");
+  });
+  (issues.results || []).forEach((i) => caveats.push("既知の問題: " + i.title));
+  if (mode === "age") {
+    caveats.push("外国人人口は2026-04以降の5ヶ月分しか収録がなく、国籍別の季節変動は算出できない");
+  }
+
+  const facts = buildFacts(mode, q.rows, {
+    scopeLabel,
+    month,
+    coverage: "2012-08 〜 2026-08 のうち移動平均の窓が揃う月",
+  });
+
+  const meta = { mode, dataset: ds.dataset_key };
+
+  /* --- 要件5 -------------------------------------------------------- */
+  let fact, check;
+  try {
+    fact = await callClaude(env, {
+      system: SYS_FACT,
+      messages: [{ role: "user", content: userFact(facts, caveats) }],
+      model: MODELS.fact,
+      maxTokens: 700,
+      metadata: { ...meta, req: "5" },
+    });
+    check = verifyNumbers(fact.text, facts, caveats);
+
+    /* 一度だけ、より強い指示で書き直させる。
+       それでも通らなければ表示しない。数字を作った文章を出すより空白の方がよい。 */
+    if (!check.ok) {
+      fact = await callClaude(env, {
+        system: SYS_FACT,
+        messages: [
+          { role: "user", content: userFact(facts, caveats) },
+          { role: "assistant", content: fact.text },
+          {
+            role: "user",
+            content:
+              "次の数値はデータに存在しません: " + check.bad.join(", ") +
+              "。データにある数値だけを使い、書き直してください。計算・丸めをしないこと。",
+          },
+        ],
+        model: MODELS.fact,
+        maxTokens: 700,
+        cacheTtl: 0,
+        metadata: { ...meta, req: "5", retry: "1" },
+      });
+      check = verifyNumbers(fact.text, facts, caveats);
+    }
+  } catch (e) {
+    return json({ error: "要約の生成に失敗しました: " + e.message, facts, caveats }, 200);
+  }
+
+  if (!check.ok) {
+    return json({
+      facts, caveats,
+      rejected: {
+        reason: "生成された文章に、渡していない数値が含まれていました",
+        numbers: check.bad,
+      },
+      trace: { fact_log_id: fact.logId },
+    });
+  }
+
+  /* --- 要件6 -------------------------------------------------------- */
+  let ins = null, insErr = null;
+  try {
+    const r = await callClaudeJson(env, {
+      system: SYS_INSIGHT,
+      messages: [{ role: "user", content: userInsight(fact.text, facts, caveats) }],
+      model: MODELS.insight,
+      maxTokens: 800,
+      metadata: { ...meta, req: "6" },
+    });
+    ins = { ...r.json, logId: r.logId, cacheStatus: r.cacheStatus, model: r.model };
+  } catch (e) {
+    insErr = e.message;
+  }
+
+  return json({
+    fact: {
+      text: fact.text,
+      logId: fact.logId,
+      cacheStatus: fact.cacheStatus,
+      model: fact.model,
+      elapsedMs: fact.elapsedMs,
+    },
+    insight: ins,
+    insightError: insErr,
+    facts,
+    caveats,
+    verified: true,
   });
 }
 
@@ -504,6 +671,17 @@ h3.sec{font-size:.95rem;margin:0 0 4px}
 .lg{font-size:.65rem;color:var(--mut);display:flex;flex-wrap:wrap;gap:7px;margin-top:3px}
 .lg span{display:flex;align-items:center;gap:3px}
 .lg i{display:inline-block;width:9px;height:3px;border-radius:1px}
+.ai{border-radius:6px;padding:14px 16px;margin-bottom:14px}
+.ai h4{font-size:.8rem;margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.ai h4 em{font-style:normal;font-size:.68rem;font-weight:400;color:var(--mut)}
+.ai p{margin:0;font-size:.88rem}
+.ai5{background:#fff;border:1px solid var(--line);border-left:3px solid var(--acc)}
+.ai6{background:#f6f3ee;border:1px solid #e3ddd2;border-left:3px dashed var(--warn)}
+.ai6 .sub2{margin-top:8px;font-size:.78rem;color:#5c554c}
+.ai6 .sub2 b{font-weight:600}
+.aibadge{font-size:.62rem;padding:1px 6px;border-radius:8px;background:var(--acc);color:#fff}
+.ai6 .aibadge{background:var(--warn)}
+.airej{background:#fdf4ee;border:1px solid #e8d3c2;border-left:3px solid var(--warn)}
 .busy{color:var(--mut);font-size:.85rem}
 </style></head><body><div class="wrap">
 
@@ -1067,6 +1245,85 @@ function drawRank(d, box){
     + "。町丁単位で見ると区全体の増減とは向きが揃わないことがあります。</p>"));
 }
 
+/* ---------- 要件5（事実）・要件6（示唆） ----------
+   二つを見た目で分ける。同じ枠に入れると、
+   計算結果と解釈が同じ確からしさに見えてしまう。 */
+function aiBox(cls, badge, title, note, bodyHtml){
+  var d = document.createElement("div");
+  d.className = "ai " + cls;
+  d.innerHTML = "<h4><span class='aibadge'>" + badge + "</span>" + title
+              + (note ? "<em>" + note + "</em>" : "") + "</h4>" + bodyHtml;
+  return d;
+}
+
+function loadInsight(box){
+  box.innerHTML = "<p class='busy'>要約を生成中…</p>";
+  var url = "/api/q/insight?dataset=" + encodeURIComponent(DS)
+          + "&mode=" + $("s-mode").value
+          + ($("s-area").value ? "&key_code=" + $("s-area").value : "")
+          + "&month=" + $("s-month").value;
+
+  api(url).then(function(d){
+    box.innerHTML = "";
+    if (d.skipped) return;
+
+    if (d.rejected){
+      box.appendChild(aiBox("airej", "検証失敗", "要約を表示しません", "",
+        "<p>" + d.rejected.reason + "（" + d.rejected.numbers.join(", ") + "）"
+        + "。数値の検証に通らなかった文章は表示しない設計です。</p>"));
+      return;
+    }
+    if (d.error){
+      box.appendChild(aiBox("airej", "エラー", "要約を生成できませんでした", "",
+        "<p>" + d.error + "</p>"));
+      return;
+    }
+
+    if (d.fact){
+      var n5 = "上の計算結果のみから生成。数値は検証済み";
+      box.appendChild(aiBox("ai5", "事実", "集計結果の要約", n5,
+        "<p>" + d.fact.text.replace(/\\n/g, "<br>") + "</p>"));
+    }
+
+    if (d.insight){
+      var b = "<p>" + (d.insight.interpretation || "") + "</p>";
+      if (d.insight.limits){
+        b += "<div class='sub2'><b>このデータでは検証できないこと</b><br>"
+           + d.insight.limits + "</div>";
+      }
+      if (d.insight.falsification){
+        b += "<div class='sub2'><b>この解釈が誤りなら</b><br>"
+           + d.insight.falsification + "</div>";
+      }
+      box.appendChild(aiBox("ai6", "示唆", "AIによる解釈",
+        "事実ではありません。データ外の知識を含みます", b));
+    } else if (d.insightError){
+      box.appendChild(aiBox("airej", "エラー", "示唆を生成できませんでした", "",
+        "<p>" + d.insightError + "</p>"));
+    }
+
+    /* 何を渡して生成させたかを見せる。
+       SQLを出すのと同じ理屈で、プロンプトも検算可能にする。 */
+    var det = document.createElement("details");
+    var sm = document.createElement("summary");
+    sm.textContent = "AIに渡した内容と制約";
+    det.appendChild(sm);
+    var pre = document.createElement("pre");
+    pre.textContent = JSON.stringify(d.facts, null, 1)
+      + "\\n\\n-- 制約\\n" + (d.caveats || []).map(function(c){ return "- " + c; }).join("\\n")
+      + "\\n\\n-- モデル: " + (d.fact ? d.fact.model : "-")
+      + "\\n-- ログID: " + (d.fact ? d.fact.logId : "-")
+      + (d.fact && d.fact.cacheStatus ? " / cache " + d.fact.cacheStatus : "");
+    det.appendChild(pre);
+    box.appendChild(det);
+
+  }).catch(function(e){
+    box.innerHTML = "";
+    box.appendChild(aiBox("airej", "エラー", "要約を取得できませんでした", "",
+      "<p>" + e.message + "</p>"));
+  });
+}
+
 /* ---------- ④ 季節変動 ---------- */
 
 /* 0 を中心に左右へ伸びる棒。季節変動は向きが意味を持つので、
@@ -1156,7 +1413,27 @@ function drawSeason(d, box){
   }
 
   var c = card(h);
+
+  /* 一覧から入ってきたとき、戻る導線がないと行き止まりになる。 */
+  if (d.mode !== "strength"){
+    var bk = document.createElement("button");
+    bk.className = "mini";
+    bk.style.marginBottom = "10px";
+    bk.textContent = "← 振幅ランキングに戻る";
+    bk.addEventListener("click", function(){
+      $("s-mode").value = "strength";
+      syncSeason();
+      run("season");
+    });
+    c.insertBefore(bk, c.firstChild);
+  }
+
   box.appendChild(c);
+
+  /* 要件5・6は別エンドポイント。表を先に出してから後で差し込む。 */
+  var ai = document.createElement("div");
+  box.appendChild(ai);
+  loadInsight(ai);
 
   /* 振幅ランキングからプロファイルへの導線。
      突出した町丁を見つけたあと、下の粒度へ降りられないと意味がない。 */
@@ -1350,6 +1627,7 @@ export async function handleAnalysis(env, url) {
     if (p === "/api/q/pyramid") return apiPyramid(env, url);
     if (p === "/api/q/ranking") return apiRanking(env, url);
     if (p === "/api/q/seasonality") return apiSeasonality(env, url);
+    if (p === "/api/q/insight") return apiInsight(env, url);
   } catch (e) {
     return json({ error: String(e.message || e) }, 500);
   }
