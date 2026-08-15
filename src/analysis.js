@@ -148,8 +148,12 @@ async function apiTrend(env, url) {
   const to = url.searchParams.get("to");
   if (!isDate(from) || !isDate(to)) return bad("期間の指定が不正です");
 
+  /* split=1 で町丁別に分ける。合算すると個々の動きが打ち消し合って消えるので、
+     比較したいときは GROUP BY の粒度そのものを変える必要がある。 */
+  const split = url.searchParams.get("split") === "1";
+
   const keys = (url.searchParams.get("key_code") || "")
-    .split(",").map((s) => s.trim()).filter(isKey).slice(0, 20);
+    .split(",").map((s) => s.trim()).filter(isKey).slice(0, split ? 120 : 20);
 
   const notes = [
     ds.view + " を参照（age_class='total' と sex='total' を除外済みのため、SUMしても二重計上にならない）",
@@ -157,11 +161,20 @@ async function apiTrend(env, url) {
     "男女を合算した値",
   ];
 
-  let sql =
-    `SELECT reference_date, SUM(value) AS value, COUNT(DISTINCT key_code) AS areas\n` +
-    `  FROM ${ds.view}\n` +
-    ` WHERE reference_date BETWEEN ?1 AND ?2`;
+  let sql;
   const params = [from, to];
+
+  if (split) {
+    sql =
+      `SELECT reference_date, key_code, MAX(area_name) AS area_name, SUM(value) AS value\n` +
+      `  FROM ${ds.view}\n` +
+      ` WHERE reference_date BETWEEN ?1 AND ?2`;
+  } else {
+    sql =
+      `SELECT reference_date, SUM(value) AS value, COUNT(DISTINCT key_code) AS areas\n` +
+      `  FROM ${ds.view}\n` +
+      ` WHERE reference_date BETWEEN ?1 AND ?2`;
+  }
 
   if (keys.length) {
     const ph = keys.map((_, i) => "?" + (i + 3)).join(", ");
@@ -169,9 +182,15 @@ async function apiTrend(env, url) {
     params.push(...keys);
     notes.push(`町丁 ${keys.length} 件に限定`);
   } else {
-    notes.push("区全体（全町丁の合計）");
+    notes.push(split ? "全町丁（町丁ごとに分けて表示）" : "区全体（全町丁の合計）");
   }
-  sql += `\n GROUP BY reference_date\n ORDER BY reference_date`;
+
+  if (split) {
+    sql += `\n GROUP BY reference_date, key_code\n ORDER BY key_code, reference_date`;
+    notes.push("町丁ごとに分けて集計。合算していないため、区全体の推移とは別のもの");
+  } else {
+    sql += `\n GROUP BY reference_date\n ORDER BY reference_date`;
+  }
 
   const rs = await getDb(env).prepare(sql).bind(...params).all();
 
@@ -186,7 +205,7 @@ async function apiTrend(env, url) {
     .bind(ds.dataset_key, from, to)
     .all();
 
-  return json({ rows: rs.results || [], sql, params, notes, annotations: gaps.results || [] });
+  return json({ rows: rs.results || [], split, sql, params, notes, annotations: gaps.results || [] });
 }
 
 /* --- ② 年齢構成 ------------------------------------------------------ */
@@ -472,6 +491,19 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .mut{color:var(--mut)}
 .lnk{background:none;border:0;padding:0;font:inherit;color:var(--acc);cursor:pointer;text-decoration:underline}
 h3.sec{font-size:.95rem;margin:0 0 4px}
+.tip{position:fixed;pointer-events:none;background:#26221c;color:#fff;font-size:.72rem;
+     padding:6px 9px;border-radius:4px;z-index:50;white-space:nowrap;opacity:0;line-height:1.5;
+     box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.tip.on{opacity:1}
+.tip b{font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+.pnl{border:1px solid var(--line);border-radius:5px;padding:8px 8px 6px;background:#fff}
+.pnl h4{font-size:.78rem;margin:0 0 2px;font-weight:600}
+.pnl h4 button{background:none;border:0;padding:0;font:inherit;color:var(--acc);
+               cursor:pointer;text-decoration:underline}
+.lg{font-size:.65rem;color:var(--mut);display:flex;flex-wrap:wrap;gap:7px;margin-top:3px}
+.lg span{display:flex;align-items:center;gap:3px}
+.lg i{display:inline-block;width:9px;height:3px;border-radius:1px}
 .busy{color:var(--mut);font-size:.85rem}
 </style></head><body><div class="wrap">
 
@@ -499,6 +531,19 @@ h3.sec{font-size:.95rem;margin:0 0 4px}
     <div><label>町丁（Ctrlクリックで複数）</label>
       <select id="t-area" multiple disabled></select>
       <button type="button" class="mini" id="t-clear">選択を解除</button>
+    </div>
+    <div><label>表示</label>
+      <select id="t-view">
+        <option value="sum">合算（1本の線）</option>
+        <option value="split">町丁別に並べる</option>
+      </select>
+    </div>
+    <div><label>縦軸</label>
+      <select id="t-scale" disabled>
+        <option value="each">パネルごとに最適化</option>
+        <option value="same">全パネル共通</option>
+        <option value="index">指数（起点=100）</option>
+      </select>
     </div>
     <button class="go" id="t-go">描画</button>
   </div>
@@ -595,8 +640,244 @@ function card(html){
   return c;
 }
 
+/* ---------- ツールチップ ----------
+   SVG は viewBox で拡縮されるので、画面座標をそのまま使えない。
+   getBoundingClientRect で実寸を取って viewBox の座標系に戻す。 */
+var TIP = null;
+function tipEl(){
+  if (!TIP){ TIP = document.createElement("div"); TIP.className = "tip"; document.body.appendChild(TIP); }
+  return TIP;
+}
+function tipShow(html, ev){
+  var t = tipEl();
+  t.innerHTML = html;
+  t.classList.add("on");
+  var x = ev.clientX + 14, y = ev.clientY + 14;
+  var w = t.offsetWidth, h = t.offsetHeight;
+  if (x + w > window.innerWidth - 8) x = ev.clientX - w - 14;
+  if (y + h > window.innerHeight - 8) y = ev.clientY - h - 14;
+  t.style.left = x + "px"; t.style.top = y + "px";
+}
+function tipHide(){ if (TIP) TIP.classList.remove("on"); }
+
+/* プロット領域に透明な受け皿を置き、横位置から最寄りの月を引く。
+   点ごとに当たり判定を作らないのは、月次195点だと点が小さすぎて拾えないため。 */
+function attachHover(s, W, H, ml, mt, pw, ph, n, render){
+  if (n < 1) return;
+  var hit = el("rect", {x: ml, y: mt, width: pw, height: ph, fill: "transparent"});
+  var vline = el("line", {x1: ml, y1: mt, x2: ml, y2: mt + ph,
+                          stroke: "#b4552d", "stroke-width": 1, opacity: 0});
+  s.appendChild(vline);
+  s.appendChild(hit);
+  hit.addEventListener("mousemove", function(ev){
+    var r = s.getBoundingClientRect();
+    var vx = (ev.clientX - r.left) / r.width * W;
+    var i = n < 2 ? 0 : Math.round((vx - ml) / pw * (n - 1));
+    if (i < 0) i = 0; if (i > n - 1) i = n - 1;
+    var px = ml + (n < 2 ? pw / 2 : pw * i / (n - 1));
+    vline.setAttribute("x1", px); vline.setAttribute("x2", px);
+    vline.setAttribute("opacity", 1);
+    tipShow(render(i), ev);
+  });
+  hit.addEventListener("mouseleave", function(){
+    vline.setAttribute("opacity", 0);
+    tipHide();
+  });
+}
+
+/* ---------- ①b 町丁別トレリス ----------
+   「○N丁目」を分解して町ごとのパネルにまとめ、丁目を色で分ける。
+   88町丁をそのまま並べると読めないが、町でまとめると25前後に収まる。 */
+var PAL = ["#2b5a8a", "#b4552d", "#4a7c59", "#8a5a9e", "#c19a2e", "#3f7d8c", "#a8455f"];
+
+function townOf(name){
+  var m = String(name).match(/^(.*?)(\d+)丁目$/);
+  return m ? {town: m[1], no: parseInt(m[2], 10)} : {town: String(name), no: 0};
+}
+
+function drawTrendSplit(d, box){
+  var rows = d.rows;
+  if (!rows.length){ box.appendChild(card("<p>該当する町丁がありません。</p>")); return; }
+
+  var scale = $("t-scale").value;
+
+  /* 日付軸を先に確定させる。町丁によって欠測があっても横軸を揃えるため。 */
+  var dset = {}, dates = [];
+  rows.forEach(function(r){ if (!(r.reference_date in dset)){ dset[r.reference_date] = 1; dates.push(r.reference_date); } });
+  dates.sort();
+  var di = {}; dates.forEach(function(dt, i){ di[dt] = i; });
+
+  var byKey = {};
+  rows.forEach(function(r){
+    if (!byKey[r.key_code]){
+      var t = townOf(r.area_name);
+      byKey[r.key_code] = {key: r.key_code, name: r.area_name, town: t.town, no: t.no,
+                           v: new Array(dates.length)};
+    }
+    byKey[r.key_code].v[di[r.reference_date]] = r.value;
+  });
+
+  var series = Object.keys(byKey).map(function(k){ return byKey[k]; });
+
+  /* 指数化は規模の違いを消す。人口300人の町丁と6000人の町丁を
+     同じ軸に乗せると、前者の動きは目で見えない。 */
+  if (scale === "index"){
+    series.forEach(function(s){
+      var base = null;
+      for (var i = 0; i < s.v.length; i++){ if (s.v[i] != null){ base = s.v[i]; break; } }
+      s.idx = s.v.map(function(x){ return (x == null || !base) ? null : x / base * 100; });
+    });
+  }
+
+  var pick = function(s){ return scale === "index" ? s.idx : s.v; };
+
+  var gLo = Infinity, gHi = -Infinity;
+  series.forEach(function(s){
+    pick(s).forEach(function(x){ if (x != null){ if (x < gLo) gLo = x; if (x > gHi) gHi = x; } });
+  });
+
+  /* 町ごとにまとめる。丁目番号順に並べる。 */
+  var towns = {}, order = [];
+  series.forEach(function(s){
+    if (!towns[s.town]){ towns[s.town] = []; order.push(s.town); }
+    towns[s.town].push(s);
+  });
+  order.sort();
+  order.forEach(function(t){ towns[t].sort(function(a, b){ return a.no - b.no; }); });
+
+  var wrap = document.createElement("div");
+  wrap.className = "grid";
+
+  var W = 300, H = 132, ml = 38, mr = 6, mt = 8, mb = 16;
+  var pw = W - ml - mr, ph = H - mt - mb;
+
+  order.forEach(function(tname){
+    var ss = towns[tname];
+    var lo = gLo, hi = gHi;
+    if (scale === "each"){
+      lo = Infinity; hi = -Infinity;
+      ss.forEach(function(s){
+        pick(s).forEach(function(x){ if (x != null){ if (x < lo) lo = x; if (x > hi) hi = x; } });
+      });
+    }
+    var pad = (hi - lo) * 0.12 || 10;
+    lo -= pad; hi += pad;
+
+    var x = function(i){ return ml + (dates.length < 2 ? pw / 2 : pw * i / (dates.length - 1)); };
+    var y = function(v){ return mt + ph - ph * (v - lo) / (hi - lo); };
+
+    var s = svgRoot(W, H);
+    for (var g = 0; g <= 2; g++){
+      var vy = mt + ph * g / 2, vv = hi - (hi - lo) * g / 2;
+      s.appendChild(el("line", {x1: ml, y1: vy, x2: W - mr, y2: vy, stroke: "#eeebe4"}));
+      s.appendChild(el("text", {x: ml - 5, y: vy + 3.5, "text-anchor": "end",
+                                "font-size": 9, fill: "#8a847c"},
+                       Math.round(vv).toLocaleString("ja-JP")));
+    }
+
+    /* 欠測・定義変更の縦線。小さいパネルでも消さない。 */
+    (d.annotations || []).forEach(function(a){
+      var i = di[a.reference_date], px;
+      if (i !== undefined){ px = x(i); }
+      else {
+        var af = -1;
+        for (var k = 0; k < dates.length; k++){ if (dates[k] > a.reference_date){ af = k; break; } }
+        if (af <= 0) return;
+        px = (x(af - 1) + x(af)) / 2;
+      }
+      s.appendChild(el("line", {x1: px, y1: mt, x2: px, y2: mt + ph,
+                                stroke: a.kind === "series_break" ? "#d9a48a" : "#d5d0c8",
+                                "stroke-width": 1, "stroke-dasharray": "3 2"}));
+    });
+
+    ss.forEach(function(sr, k){
+      var col = PAL[(sr.no ? sr.no - 1 : k) % PAL.length];
+      var vv = pick(sr), dpath = "", pen = false;
+      for (var i = 0; i < vv.length; i++){
+        if (vv[i] == null){ pen = false; continue; }
+        dpath += (pen ? " L" : " M") + x(i) + " " + y(vv[i]);
+        pen = true;
+      }
+      s.appendChild(el("path", {d: dpath, fill: "none", stroke: col, "stroke-width": 1.4}));
+    });
+
+    s.appendChild(el("text", {x: ml, y: H - 4, "font-size": 9, fill: "#8a847c"},
+                     dates[0].slice(0, 7)));
+    s.appendChild(el("text", {x: W - mr, y: H - 4, "text-anchor": "end",
+                              "font-size": 9, fill: "#8a847c"},
+                     dates[dates.length - 1].slice(0, 7)));
+
+    attachHover(s, W, H, ml, mt, pw, ph, dates.length, function(i){
+      var h = "<b>" + dates[i].slice(0, 7) + "</b>";
+      ss.forEach(function(sr, k){
+        var col = PAL[(sr.no ? sr.no - 1 : k) % PAL.length];
+        var raw = sr.v[i];
+        var shown = scale === "index"
+          ? (sr.idx[i] == null ? "-" : sr.idx[i].toFixed(1) + " <span style='opacity:.7'>(" + fmt(raw) + "人)</span>")
+          : (raw == null ? "-" : fmt(raw) + "人");
+        h += "<br><i style='display:inline-block;width:8px;height:3px;background:" + col
+           + ";vertical-align:middle;margin-right:4px'></i>" + sr.name + " " + shown;
+      });
+      return h;
+    });
+
+    var pnl = document.createElement("div");
+    pnl.className = "pnl";
+    var h4 = document.createElement("h4");
+    var btn = document.createElement("button");
+    btn.textContent = tname;
+    btn.title = tname + " だけを選択して再描画";
+    btn.addEventListener("click", function(){
+      var want = {}; ss.forEach(function(sr){ want[sr.key] = 1; });
+      document.querySelector("input[name=t-scope][value=pick]").checked = true;
+      syncScope();
+      [].slice.call($("t-area").options).forEach(function(o){ o.selected = !!want[o.value]; });
+      run("trend");
+    });
+    h4.appendChild(btn);
+    pnl.appendChild(h4);
+    pnl.appendChild(s);
+
+    if (ss.length > 1){
+      var lg = document.createElement("div");
+      lg.className = "lg";
+      ss.forEach(function(sr, k){
+        var col = PAL[(sr.no ? sr.no - 1 : k) % PAL.length];
+        var sp = document.createElement("span");
+        sp.innerHTML = "<i style='background:" + col + "'></i>" + (sr.no ? sr.no + "丁目" : sr.name);
+        lg.appendChild(sp);
+      });
+      pnl.appendChild(lg);
+    }
+    wrap.appendChild(pnl);
+  });
+
+  var c = card("");
+  var lead = document.createElement("p");
+  lead.style.fontSize = ".8rem"; lead.style.margin = "0 0 10px";
+  lead.className = "mut";
+  lead.textContent = series.length + " 町丁を " + order.length + " の町にまとめました。"
+    + (scale === "each" ? "縦軸はパネルごとに最適化しているため、パネル間で高さを比べられません。"
+     : scale === "same" ? "縦軸は全パネル共通です。小規模な町丁の動きは見えにくくなります。"
+     : "各町丁の起点を100とした指数です。規模の違いを除いて変化率を比べられます。")
+    + "町名を押すとその町だけを選択します。";
+  c.appendChild(lead);
+  c.appendChild(wrap);
+
+  (d.annotations || []).forEach(function(a){
+    var f = document.createElement("div");
+    f.className = "flag";
+    f.textContent = a.reference_date.slice(0, 7) + "："
+      + (a.kind === "series_break" ? "定義変更あり。" : a.kind === "upstream_missing" ? "上流に存在しない欠測。" : "取込未完了。")
+      + a.reason;
+    c.insertBefore(f, c.firstChild);
+  });
+  box.appendChild(c);
+}
+
 /* ---------- ① 推移 ---------- */
 function drawTrend(d, box){
+  if (d.split){ drawTrendSplit(d, box); return; }
   var rows = d.rows;
   if (!rows.length){ box.appendChild(card("<p>該当する月がありません。</p>")); return; }
 
@@ -648,6 +929,11 @@ function drawTrend(d, box){
       s.appendChild(el("text", {x: x(i), y: H - 16, "text-anchor": "middle",
                                 "font-size": 11, fill: "#6b6b6b"}, r.reference_date.slice(0, 7)));
     }
+  });
+
+  attachHover(s, W, H, ml, mt, pw, ph, rows.length, function(i){
+    return "<b>" + rows[i].reference_date.slice(0, 7) + "</b><br>"
+         + fmt(rows[i].value) + "\u4eba";
   });
 
   var c = card("");
@@ -918,7 +1204,8 @@ function run(kind){
       : [];
     url = "/api/q/trend?dataset=" + encodeURIComponent(DS)
         + "&from=" + $("t-from").value + "&to=" + $("t-to").value
-        + (sel.length ? "&key_code=" + sel.join(",") : "");
+        + (sel.length ? "&key_code=" + sel.join(",") : "")
+        + ($("t-view").value === "split" ? "&split=1" : "");
   } else if (kind === "pyramid"){
     out = $("y-out");
     url = "/api/q/pyramid?dataset=" + encodeURIComponent(DS)
@@ -957,6 +1244,12 @@ document.querySelectorAll(".tab").forEach(function(b){
   });
 });
 $("t-go").addEventListener("click", function(){ run("trend"); });
+
+/* 縦軸の選択はトレリスのときだけ意味を持つ。 */
+function syncView(){
+  $("t-scale").disabled = ($("t-view").value !== "split");
+}
+$("t-view").addEventListener("change", syncView);
 $("y-go").addEventListener("click", function(){ run("pyramid"); });
 $("r-go").addEventListener("click", function(){ run("rank"); });
 $("s-go").addEventListener("click", function(){ run("season"); });
@@ -1005,6 +1298,8 @@ api("/api/q/meta?dataset=" + encodeURIComponent(DS)).then(function(m){
   fill($("y-date"), ms, null, null, last);
   fill($("r-from"), ms, null, null, back);
   fill($("r-to"), ms, null, null, last);
+
+  syncView();
 
   var areaOpts = m.areas.slice();
   fill($("t-area"), areaOpts, "key_code", "area_name", null);
