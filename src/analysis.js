@@ -296,6 +296,129 @@ async function apiRanking(env, url) {
   });
 }
 
+
+/* --- ④ 季節変動 ------------------------------------------------------
+ *  前計算した季節指数を読むだけ。計算は sql/seasonality*.sql 側で済ませてある。
+ *
+ *  移動平均によるトレンド除去をクエリごとに書くと、条件の微妙な違いで
+ *  数字が変わる。指数はデータの性質なので、画面の操作で揺らいではいけない。
+ *
+ *  mode
+ *    strength  町丁ごとの振幅ランキング
+ *    profile   1町丁の12ヶ月プロファイル
+ *    age       1町丁 × 1暦月の年齢階級別内訳
+ * ------------------------------------------------------------------- */
+const isMonth = (s) => /^(0[1-9]|1[0-2])$/.test(s || "");
+
+async function apiSeasonality(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const mode = url.searchParams.get("mode") || "strength";
+  const key = url.searchParams.get("key_code") || "";
+  const month = url.searchParams.get("month") || "09";
+
+  if (mode !== "strength" && !isKey(key)) return bad("町丁を指定してください");
+  if (mode === "age" && !isMonth(month)) return bad("月の指定が不正です");
+
+  /* 指数の読み方はモードによらず同じなので毎回付ける。
+     数字だけが独り歩きすると、10年平均であることも
+     住民票ベースであることも落ちてしまう。 */
+  const notes = [
+    "季節指数は 2×12 移動平均でトレンドを除去した比率の暦月平均。0% が年間の平均的な水準",
+    "2012-08 の系列断絶以降のみを対象にした。それ以前は総人口の定義が異なるため接続できない",
+    "移動平均の窓（前後6ヶ月）に欠測を含む月は集計から除外。n_years が 10〜12 とばらつくのはこのため",
+    "n_above は n_years のうち指数が 0% を上回った年数。10年中5年程度なら偶然と区別がつかない",
+    "住民基本台帳の異動を集計したもので、実際の居住実態とは異なる場合がある",
+  ];
+
+  let sql, params;
+
+  if (mode === "strength") {
+    sql =
+      `SELECT s.key_code, s.area_name, s.amplitude_pct,
+` +
+      `       s.peak_month, s.peak_pct, s.trough_month, s.trough_pct
+` +
+      `  FROM v_nl_seasonality_strength s
+` +
+      `  JOIN areas a ON a.key_code = s.key_code
+` +
+      ` WHERE a.muni_code = ?1
+` +
+      ` ORDER BY s.amplitude_pct DESC
+` +
+      ` LIMIT 20`;
+    params = [ds.muni_code];
+    notes.push("振幅は年間で最も高い月と最も低い月の差。上位20件のみ表示");
+  } else if (mode === "profile") {
+    sql =
+      `SELECT month, seasonal_index, pct_vs_trend, n_above, n_years
+` +
+      `  FROM v_nl_seasonality
+` +
+      ` WHERE key_code = ?1
+` +
+      ` ORDER BY month`;
+    params = [key];
+  } else {
+    sql =
+      `SELECT age_class, age_order, pct_vs_trend, n_above, n_years
+` +
+      `  FROM v_nl_seasonality_age
+` +
+      ` WHERE key_code = ?1 AND month = ?2
+` +
+      ` ORDER BY age_order`;
+    params = [key, month];
+    notes.push(
+      "年齢不詳は除外している。トレンドが20人未満の階級も、1人の増減で比率が跳ねるため対象外"
+    );
+  }
+
+  const rs = await getDb(env).prepare(sql).bind(...params).all();
+  const rows = rs.results || [];
+
+  if (!rows.length) {
+    notes.push("該当する行がない。小規模な町丁や階級は算出対象から外れている可能性がある");
+  }
+
+  /* 断絶・欠測は特定の期間ではなく指数そのものに効くので、
+     ランキングのように期間で絞らず 2012-08 以降を全部渡す。 */
+  const gaps = await getDb(env)
+    .prepare(
+      `SELECT reference_date, kind, reason
+         FROM dataset_gaps
+        WHERE dataset_key = ?1
+          AND reference_date >= '2012-08-01'
+        ORDER BY reference_date`
+    )
+    .bind(ds.dataset_key)
+    .all();
+
+  /* 未解決の既知の問題。年齢階級別の数値に直接効くので画面に出す。 */
+  const issues = await getDb(env)
+    .prepare(
+      `SELECT title, detail, severity
+         FROM known_issues
+        WHERE dataset_key = ?1 AND resolved_at IS NULL
+        ORDER BY issue_id`
+    )
+    .bind(ds.dataset_key)
+    .all();
+
+  return json({
+    mode,
+    month,
+    rows,
+    sql,
+    params,
+    notes,
+    annotations: (gaps.results || []).filter((g) => g.kind !== "series_break"),
+    issues: issues.results || [],
+  });
+}
+
 /* =====================================================================
  *  画面
  *    描画はクライアント側で決定論的に行う。AIは一切通らない。
@@ -343,6 +466,12 @@ pre{background:#f4f2ee;padding:10px;border-radius:4px;overflow-x:auto;font-size:
 ul.notes{margin:8px 0 0;padding-left:1.2em}
 .flag{background:#fdf4ee;border-left:3px solid var(--warn);padding:8px 12px;font-size:.8rem;margin-bottom:12px}
 .attr{font-size:.75rem;color:var(--mut);border-top:1px solid var(--line);padding-top:12px;margin-top:24px}
+svg.bar{display:inline-block;width:260px;height:14px}
+svg.abar{display:inline-block;width:170px;height:10px}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.mut{color:var(--mut)}
+.lnk{background:none;border:0;padding:0;font:inherit;color:var(--acc);cursor:pointer;text-decoration:underline}
+h3.sec{font-size:.95rem;margin:0 0 4px}
 .busy{color:var(--mut);font-size:.85rem}
 </style></head><body><div class="wrap">
 
@@ -353,6 +482,7 @@ ul.notes{margin:8px 0 0;padding-left:1.2em}
   <button class="tab" role="tab" data-p="trend" aria-selected="true">人口推移</button>
   <button class="tab" role="tab" data-p="pyramid" aria-selected="false">年齢構成</button>
   <button class="tab" role="tab" data-p="rank" aria-selected="false">増減率ランキング</button>
+  <button class="tab" role="tab" data-p="season" aria-selected="false">季節変動</button>
 </div>
 
 <section class="panel on" id="p-trend">
@@ -391,6 +521,22 @@ ul.notes{margin:8px 0 0;padding-left:1.2em}
     <button class="go" id="r-go">集計</button>
   </div>
   <div id="r-out"></div>
+</section>
+
+<section class="panel" id="p-season">
+  <div class="ctl">
+    <div><label>表示</label>
+      <select id="s-mode">
+        <option value="strength">振幅ランキング（町丁）</option>
+        <option value="profile">12ヶ月プロファイル</option>
+        <option value="age">年齢階級別の内訳</option>
+      </select>
+    </div>
+    <div><label>町丁</label><select id="s-area" disabled></select></div>
+    <div><label>月</label><select id="s-month" disabled></select></div>
+    <button class="go" id="s-go">集計</button>
+  </div>
+  <div id="s-out"></div>
 </section>
 
 <div class="attr" id="attr"></div>
@@ -635,6 +781,130 @@ function drawRank(d, box){
     + "。町丁単位で見ると区全体の増減とは向きが揃わないことがあります。</p>"));
 }
 
+/* ---------- ④ 季節変動 ---------- */
+
+/* 0 を中心に左右へ伸びる棒。季節変動は向きが意味を持つので、
+   絶対値の棒にして順位だけ見せることはしない。 */
+function pctBar(v, max){
+  var W = 260, half = W / 2;
+  var w = max ? Math.min(Math.abs(v) / max, 1) * (half - 4) : 0;
+  var x = v < 0 ? half - w : half;
+  var col = v < 0 ? "var(--warn)" : "var(--acc)";
+  return '<svg class="bar" viewBox="0 0 ' + W + ' 14">'
+       + '<line x1="' + half + '" y1="0" x2="' + half + '" y2="14" stroke="#c9c4bb"/>'
+       + '<rect x="' + x + '" y="3" width="' + w + '" height="8" fill="' + col + '"/>'
+       + '</svg>';
+}
+
+/* 再現性の言い換え。ここまでは事実の範囲。
+   なぜそうなるのかは要件5・6側で扱う。 */
+function consistency(above, years){
+  if (!years) return "-";
+  var r = above / years;
+  var lab = (r >= 0.9 || r <= 0.1) ? "ほぼ毎年同じ向き"
+          : (r >= 0.75 || r <= 0.25) ? "多くの年で同じ向き"
+          : "年によって違う";
+  return above + "/" + years + "年 <span class='mut'>" + lab + "</span>";
+}
+
+function maxAbs(rows, k){
+  var m = 0;
+  rows.forEach(function(r){ m = Math.max(m, Math.abs(r[k])); });
+  return m;
+}
+
+function drawSeason(d, box){
+  if (!d.rows || !d.rows.length){
+    box.appendChild(card("<p>該当するデータがありません。</p>"));
+    return;
+  }
+  var h = "";
+
+  if (d.mode === "strength"){
+    var mx = maxAbs(d.rows, "amplitude_pct");
+    h += "<h3 class='sec'>季節変動の大きい町丁</h3>";
+    h += "<p class='mut' style='font-size:.8rem;margin:0 0 10px'>"
+       + "年間で最も高い月と最も低い月の差。町丁名を押すと 12ヶ月プロファイルに移ります。</p>";
+    h += "<table><thead><tr><th>町丁</th><th>振幅</th><th></th>"
+       + "<th>最高月</th><th>最低月</th></tr></thead><tbody>";
+    d.rows.forEach(function(r){
+      h += "<tr><td><button class='lnk' data-key='" + r.key_code + "'>" + r.area_name + "</button></td>"
+         + "<td class='num'>" + r.amplitude_pct.toFixed(2) + "%</td>"
+         + "<td><svg class='abar' viewBox='0 0 170 10'><rect x='0' y='2' width='"
+         + (mx ? r.amplitude_pct / mx * 170 : 0) + "' height='6' fill='var(--acc)'/></svg></td>"
+         + "<td class='num'>" + Number(r.peak_month) + "月 " + r.peak_pct.toFixed(1) + "%</td>"
+         + "<td class='num'>" + Number(r.trough_month) + "月 " + r.trough_pct.toFixed(1) + "%</td></tr>";
+    });
+    h += "</tbody></table>";
+
+  } else if (d.mode === "profile"){
+    var mp = maxAbs(d.rows, "pct_vs_trend");
+    h += "<h3 class='sec'>12ヶ月プロファイル</h3>";
+    h += "<p class='mut' style='font-size:.8rem;margin:0 0 10px'>"
+       + "各月の人口がトレンド比で何%高いか。</p>";
+    h += "<table><thead><tr><th>月</th><th>トレンド比</th><th></th>"
+       + "<th>上回った年</th></tr></thead><tbody>";
+    d.rows.forEach(function(r){
+      h += "<tr><td>" + Number(r.month) + "月</td>"
+         + "<td class='num'>" + r.pct_vs_trend.toFixed(2) + "%</td>"
+         + "<td>" + pctBar(r.pct_vs_trend, mp) + "</td>"
+         + "<td>" + consistency(r.n_above, r.n_years) + "</td></tr>";
+    });
+    h += "</tbody></table>";
+
+  } else {
+    var ma = maxAbs(d.rows, "pct_vs_trend");
+    h += "<h3 class='sec'>年齢階級別の内訳（" + Number(d.month) + "月）</h3>";
+    h += "<p class='mut' style='font-size:.8rem;margin:0 0 10px'>"
+       + "特定の階級だけが動いているなら、その年齢層に固有の要因が働いている可能性があります。"
+       + "全階級が同じ向きに動いている場合は、世帯単位の異動や集計上の要因を疑うべきです。</p>";
+    h += "<table><thead><tr><th>年齢</th><th>トレンド比</th><th></th>"
+       + "<th>上回った年</th></tr></thead><tbody>";
+    d.rows.forEach(function(r){
+      h += "<tr><td>" + r.age_class + "</td>"
+         + "<td class='num'>" + r.pct_vs_trend.toFixed(2) + "%</td>"
+         + "<td>" + pctBar(r.pct_vs_trend, ma) + "</td>"
+         + "<td>" + consistency(r.n_above, r.n_years) + "</td></tr>";
+    });
+    h += "</tbody></table>";
+  }
+
+  var c = card(h);
+  box.appendChild(c);
+
+  /* 振幅ランキングからプロファイルへの導線。
+     突出した町丁を見つけたあと、下の粒度へ降りられないと意味がない。 */
+  if (d.mode === "strength"){
+    c.querySelectorAll("button.lnk").forEach(function(b){
+      b.addEventListener("click", function(){
+        $("s-mode").value = "profile";
+        syncSeason();
+        $("s-area").value = b.dataset.key;
+        run("season");
+      });
+    });
+  }
+
+  /* 欠測は指数の分母に直接効くので、数字の後ろではなくここに出す。 */
+  (d.annotations || []).forEach(function(a){
+    var f = document.createElement("div");
+    f.className = "flag";
+    f.textContent = a.reference_date.slice(0, 7) + " は欠測です。"
+      + "この月の前後6ヶ月は移動平均の窓が埋まらず、集計から外れています。" + a.reason;
+    box.appendChild(f);
+  });
+
+  /* notes は「この集計の読み方」、issues は「データ自体の未解決事項」。
+     性質が違うので同じ枠に入れない。 */
+  if (d.issues && d.issues.length){
+    var ih = "<h3 class='sec'>このデータの既知の問題</h3><ul style='margin:0;padding-left:1.2em;font-size:.8rem'>";
+    d.issues.forEach(function(i){
+      ih += "<li><strong>" + i.title + "</strong><br><span class='mut'>" + i.detail + "</span></li>";
+    });
+    box.appendChild(card(ih + "</ul>"));
+  }
+}
+
 /* ---------- 実行 ---------- */
 function run(kind){
   var out, url;
@@ -654,6 +924,12 @@ function run(kind){
     url = "/api/q/pyramid?dataset=" + encodeURIComponent(DS)
         + "&date=" + $("y-date").value
         + ($("y-area").value ? "&key_code=" + $("y-area").value : "");
+  } else if (kind === "season"){
+    out = $("s-out");
+    url = "/api/q/seasonality?dataset=" + encodeURIComponent(DS)
+        + "&mode=" + $("s-mode").value
+        + ($("s-area").value ? "&key_code=" + $("s-area").value : "")
+        + "&month=" + $("s-month").value;
   } else {
     out = $("r-out");
     url = "/api/q/ranking?dataset=" + encodeURIComponent(DS)
@@ -664,6 +940,7 @@ function run(kind){
     out.innerHTML = "";
     if (kind === "trend") drawTrend(d, out);
     else if (kind === "pyramid") drawPyramid(d, out);
+    else if (kind === "season") drawSeason(d, out);
     else drawRank(d, out);
     meta(out, d);
   }).catch(function(e){
@@ -682,6 +959,16 @@ document.querySelectorAll(".tab").forEach(function(b){
 $("t-go").addEventListener("click", function(){ run("trend"); });
 $("y-go").addEventListener("click", function(){ run("pyramid"); });
 $("r-go").addEventListener("click", function(){ run("rank"); });
+$("s-go").addEventListener("click", function(){ run("season"); });
+$("s-mode").addEventListener("change", syncSeason);
+
+/* モードで使わないコントロールは無効にする。
+   選べるのに効かない、という状態を作らない。 */
+function syncSeason(){
+  var m = $("s-mode").value;
+  $("s-area").disabled  = (m === "strength");
+  $("s-month").disabled = (m !== "age");
+}
 
 /* 区全体 / 町丁選択の切替。
    区全体に戻したら選択も消す。「選んだまま無効」の状態を残さない。 */
@@ -724,6 +1011,18 @@ api("/api/q/meta?dataset=" + encodeURIComponent(DS)).then(function(m){
   $("t-area").selectedIndex = -1;   // 環境によって先頭が選択済みになるのを防ぐ
   syncScope();
   fill($("y-area"), [{key_code: "", area_name: "区全体"}].concat(areaOpts), "key_code", "area_name", "");
+  fill($("s-area"), areaOpts, "key_code", "area_name", null);
+  var mo = $("s-month");
+  mo.innerHTML = "";
+  for (var i = 1; i <= 12; i++){
+    var op = document.createElement("option");
+    op.value = ("0" + i).slice(-2);
+    op.textContent = i + "月";
+    mo.appendChild(op);
+  }
+  mo.value = "09";
+  syncSeason();
+
 
   var a = m.dataset.attribution || "（出典表示が未設定です）";
   $("attr").textContent = a + "　ライセンス：" + (m.dataset.license || "未確認");
@@ -755,6 +1054,7 @@ export async function handleAnalysis(env, url) {
     if (p === "/api/q/trend") return apiTrend(env, url);
     if (p === "/api/q/pyramid") return apiPyramid(env, url);
     if (p === "/api/q/ranking") return apiRanking(env, url);
+    if (p === "/api/q/seasonality") return apiSeasonality(env, url);
   } catch (e) {
     return json({ error: String(e.message || e) }, 500);
   }
