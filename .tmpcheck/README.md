@@ -1,1 +1,0 @@
-This folder contains the built output assets for the worker "opendata-app" generated at 2026-08-15T01:40:18.982Z.
