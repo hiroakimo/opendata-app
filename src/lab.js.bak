@@ -77,37 +77,6 @@ const isKey = (s) => /^\d{6,13}$/.test(s || "");
  * ------------------------------------------------------------------- */
 const VIEW_BY_GRAIN = { "5y": "v_population_5y", "1y": "v_population_1y" };
 
-/* 指標の許可リスト。1リクエストで扱う measure は必ず1つ。
-   単位の違うものを同じ SUM に入れない。 */
-const MEASURES = {
-  population: {
-    label: "人口", unit: "人", hasAge: true, sumOk: true,
-    why: "age_class='total' と sex='total' の行を除外済みのため、SUMしても二重計上にならない",
-  },
-  households: {
-    label: "世帯数", unit: "世帯", hasAge: false, sumOk: true,
-    why: "世帯数は年齢・男女の内訳を持たず、1町丁1ヶ月あたり1行のみ（17,160行 = 88町丁 × 195ヶ月）",
-  },
-};
-/* 粒度 × 指標 → ビュー名。ユーザー入力から組み立てず、この表からのみ引く。
-   1歳階級に世帯数は存在しない。意図的な空白なのでフォールバックさせない。 */
-const VIEW_BY_GRAIN_MEASURE = {
-  "5y": { population: "v_population_5y", households: "v_households_5y" },
-  "1y": { population: "v_population_1y" },
-};
-/* v_households_5y は列を絞って作られており、age_class / sex を持たない。
-   observations_5y 側で households は total/total の1行のみ（17,160行 = 88×195）。
-   ビューの時点で1町丁1ヶ月1行なので、追加の防御は不要かつ参照不可。 */
-const EXTRA_WHERE = {};
-/* ds.view は人口用。measure 指定があればここで解決し直す。
-   ds そのものは書き換えない（他のAPIが同じ ds を参照しているため）。 */
-function resolveMeasure(ds, raw) {
-  const key = MEASURES[raw] ? raw : "population";
-  const view = (VIEW_BY_GRAIN_MEASURE[ds.granularity] || {})[key];
-  if (!view) return null;
-  return { key, ...MEASURES[key], view, extraWhere: EXTRA_WHERE[key] || "" };
-}
-
 async function dataset(env, key) {
   const row = await getDb(env)
     .prepare(
@@ -201,18 +170,15 @@ async function apiTrend(env, url) {
   /* split=1 で町丁別に分ける。合算すると個々の動きが打ち消し合って消えるので、
      比較したいときは GROUP BY の粒度そのものを変える必要がある。 */
   const split = url.searchParams.get("split") === "1";
-  const ms = resolveMeasure(ds, url.searchParams.get("measure"));
-  if (!ms) return bad("この粒度では指定された指標を扱えません");
 
   const keys = (url.searchParams.get("key_code") || "")
     .split(",").map((s) => s.trim()).filter(isKey).slice(0, split ? 120 : 20);
 
   const notes = [
-    `${ms.view} を参照（${ms.why}）`,
-    `指標は「${ms.label}」（単位：${ms.unit}）のみ。他の指標は含まない`,
-    "2012-08 の系列断絶は人口・世帯数の両系列で確認済み（住基法改正による外国人の算入）",
+    ds.view + " を参照（age_class='total' と sex='total' を除外済みのため、SUMしても二重計上にならない）",
+    "measure='population' のみ。世帯数・外国人人口は含まない",
+    "男女を合算した値",
   ];
-  if (ms.hasAge) notes.push("年齢階級・男女を合算した値");
 
   let sql;
   const params = [from, to];
@@ -220,13 +186,13 @@ async function apiTrend(env, url) {
   if (split) {
     sql =
       `SELECT reference_date, key_code, MAX(area_name) AS area_name, SUM(value) AS value\n` +
-      `  FROM ${ms.view}\n` +
-      ` WHERE reference_date BETWEEN ?1 AND ?2` + ms.extraWhere;
+      `  FROM ${ds.view}\n` +
+      ` WHERE reference_date BETWEEN ?1 AND ?2`;
   } else {
     sql =
       `SELECT reference_date, SUM(value) AS value, COUNT(DISTINCT key_code) AS areas\n` +
-      `  FROM ${ms.view}\n` +
-      ` WHERE reference_date BETWEEN ?1 AND ?2` + ms.extraWhere;
+      `  FROM ${ds.view}\n` +
+      ` WHERE reference_date BETWEEN ?1 AND ?2`;
   }
 
   if (keys.length) {
@@ -258,11 +224,7 @@ async function apiTrend(env, url) {
     .bind(ds.dataset_key, from, to)
     .all();
 
-  return json({
-    rows: rs.results || [], split, sql, params, notes,
-    measure: ms.key, measure_label: ms.label, unit: ms.unit,
-    annotations: gaps.results || [],
-  });
+  return json({ rows: rs.results || [], split, sql, params, notes, annotations: gaps.results || [] });
 }
 
 /* --- ② 年齢構成 ------------------------------------------------------ */

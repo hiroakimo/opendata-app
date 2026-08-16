@@ -80,14 +80,8 @@ const VIEW_BY_GRAIN = { "5y": "v_population_5y", "1y": "v_population_1y" };
 /* 指標の許可リスト。1リクエストで扱う measure は必ず1つ。
    単位の違うものを同じ SUM に入れない。 */
 const MEASURES = {
-  population: {
-    label: "人口", unit: "人", hasAge: true, sumOk: true,
-    why: "age_class='total' と sex='total' の行を除外済みのため、SUMしても二重計上にならない",
-  },
-  households: {
-    label: "世帯数", unit: "世帯", hasAge: false, sumOk: true,
-    why: "世帯数は年齢・男女の内訳を持たず、1町丁1ヶ月あたり1行のみ（17,160行 = 88町丁 × 195ヶ月）",
-  },
+  population: { label: "人口",   unit: "人",   hasAge: true,  sumOk: true },
+  households: { label: "世帯数", unit: "世帯", hasAge: false, sumOk: true },
 };
 /* 粒度 × 指標 → ビュー名。ユーザー入力から組み立てず、この表からのみ引く。
    1歳階級に世帯数は存在しない。意図的な空白なのでフォールバックさせない。 */
@@ -95,10 +89,10 @@ const VIEW_BY_GRAIN_MEASURE = {
   "5y": { population: "v_population_5y", households: "v_households_5y" },
   "1y": { population: "v_population_1y" },
 };
-/* v_households_5y は列を絞って作られており、age_class / sex を持たない。
-   observations_5y 側で households は total/total の1行のみ（17,160行 = 88×195）。
-   ビューの時点で1町丁1ヶ月1行なので、追加の防御は不要かつ参照不可。 */
-const EXTRA_WHERE = {};
+/* v_households_5y は measure='households' でしか絞っていない。
+   人口側ビューのような total 除外が入っていないため、明示的に付ける。
+   将来 households に内訳が入ったとき、黙って二重計上になるのを防ぐ。 */
+const EXTRA_WHERE = { households: " AND age_class='total' AND sex='total'" };
 /* ds.view は人口用。measure 指定があればここで解決し直す。
    ds そのものは書き換えない（他のAPIが同じ ds を参照しているため）。 */
 function resolveMeasure(ds, raw) {
@@ -208,7 +202,7 @@ async function apiTrend(env, url) {
     .split(",").map((s) => s.trim()).filter(isKey).slice(0, split ? 120 : 20);
 
   const notes = [
-    `${ms.view} を参照（${ms.why}）`,
+    ms.view + " を参照（total 行を除外済みのため、SUMしても二重計上にならない）",
     `指標は「${ms.label}」（単位：${ms.unit}）のみ。他の指標は含まない`,
     "2012-08 の系列断絶は人口・世帯数の両系列で確認済み（住基法改正による外国人の算入）",
   ];
