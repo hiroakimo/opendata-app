@@ -1178,9 +1178,10 @@ function drawTrend(d, box){
   var rate = first.value ? (diff / first.value * 100) : 0;
   var p = document.createElement("p");
   p.style.fontSize = ".85rem"; p.style.margin = "12px 0 0";
-  p.textContent = first.reference_date + " の " + fmt(first.value) + "人 から "
-                + last.reference_date + " の " + fmt(last.value) + "人へ、"
-                + (diff >= 0 ? "+" : "") + fmt(diff) + "人（"
+  var U = d.unit || "人";
+  p.textContent = first.reference_date + " の " + fmt(first.value) + U + " から "
+                + last.reference_date + " の " + fmt(last.value) + U + "へ、"
+                + (diff >= 0 ? "+" : "") + fmt(diff) + U + "（"
                 + (rate >= 0 ? "+" : "") + rate.toFixed(2) + "％）。対象 " + rows.length + " か月、"
                 + fmt(last.areas) + " 町丁。";
   c.appendChild(p);
