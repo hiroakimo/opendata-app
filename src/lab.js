@@ -748,6 +748,12 @@ h3.sec{font-size:.95rem;margin:0 0 4px}
 
 <section class="panel on" id="p-trend">
   <div class="ctl">
+    <div><label>指標</label>
+      <select id="t-measure">
+        <option value="population">人口（人）</option>
+        <option value="households">世帯数（世帯）</option>
+      </select>
+    </div>
     <div><label>開始</label><select id="t-from"></select></div>
     <div><label>終了</label><select id="t-to"></select></div>
     <div class="scope">
@@ -1533,7 +1539,8 @@ function run(kind){
     url = "/api/lab/trend?dataset=" + encodeURIComponent(DS)
         + "&from=" + $("t-from").value + "&to=" + $("t-to").value
         + (sel.length ? "&key_code=" + sel.join(",") : "")
-        + ($("t-view").value === "split" ? "&split=1" : "");
+        + ($("t-view").value === "split" ? "&split=1" : "")
+        + "&measure=" + $("t-measure").value;
   } else if (kind === "pyramid"){
     out = $("y-out");
     url = "/api/lab/pyramid?dataset=" + encodeURIComponent(DS)
