@@ -1,4 +1,4 @@
-/* =====================================================================
+﻿/* =====================================================================
  *  opendata-app / Worker
  *
  *   入口で共有パスワード認証（要件1）→ データセット一覧（要件2）
@@ -9,6 +9,7 @@
  * ===================================================================== */
 
 import { handleAnalysis } from "./analysis.js";   // 20260814 追加
+import { handleLab } from "./lab.js";           // 20260816 追加（開発版）
 
 const COOKIE = "__Host-session";
 const TTL = 60 * 60 * 12; // 12時間
@@ -168,6 +169,8 @@ async function router(request, url, env) {
 
   const an = await handleAnalysis(env, url);  // 20260814追加
   if (an) return an;                          // 20260814追加
+  const lb = await handleLab(env, url);       // 20260816追加（開発版）
+  if (lb) return lb;                          // 20260816追加（開発版）
 
   return html(page("404", "<h1>404</h1><p><a href='/'>一覧へ</a></p>"), 404);
 }

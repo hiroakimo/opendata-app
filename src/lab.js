@@ -1,0 +1,1648 @@
+﻿/* =====================================================================
+ *  lab.js —— 開発版。試行錯誤用。
+ *
+ *  ★ このファイルは本番導線に載せない。
+ *    公開版は analysis.js（/analyze）。タグ hackathon-2026 で固定済み。
+ *    公開版を戻したいときは  git checkout hackathon-2026 -- src/analysis.js
+ *
+ *  analysis.js からの複製（2026-08-16）。以後は独立して改変する。
+ *  API名前空間は /api/lab/*、ページは /lab。公開版とは完全に分離。
+ *
+ *  ここで試すこと
+ *    - measure セレクタ（人口 / 世帯数 / 世帯あたり人員）
+ *    - 年齢粒度の束ね直し（5歳階級 → 10歳階級）
+ *
+ *  設計の要点（公開版から引き継ぐ。開発版でも崩さない）
+ *
+ *   1. 出力元は必ずビュー。observations_* を直接読まない。
+ *      ビューが total 行を落としているので、素直に SUM しても
+ *      二重計上にならない。
+ *
+ *   2. **実行したSQLと適用したルールを、必ず画面に返す。**
+ *      検算できることが信頼の担保。
+ *
+ *   3. 欠測と系列断絶をグラフ上に描く。隠さない。
+ *      2017-07（上流に存在せず）と 2012-08（定義変更）は、
+ *      線を繋いだ瞬間に誤読を生む。
+ *
+ *   4. ビュー名・列名はユーザー入力から組み立てない。許可リストのみ。
+ *      measure を足しても、これは崩さない。値→ビュー名の写像を
+ *      サーバ側の定数表で持つ。
+ *
+ *   5. 1リクエストで扱う measure は1つ。単位の違うものを
+ *      同じ SUM に入れない。重ね描きが要るならクエリを分ける。
+ *
+ *  index.js への組み込みは2行。
+ *      import { handleLab } from "./lab.js";
+ *      ...
+ *      const r2 = await handleLab(env, url);
+ *      if (r2) return r2;
+ * ===================================================================== */
+import { callClaude, callClaudeJson, MODELS } from "./llm.js";
+import {
+  buildFacts, verifyNumbers,
+  SYS_FACT, SYS_INSIGHT, userFact, userInsight,
+} from "./insight.js";
+
+/* ---------------------------------------------------------------------
+ *  D1バインディング
+ *    wrangler.toml の binding 名が判らないので候補から拾う。
+ *    確定したらこの関数は消して env.DB を直接使ってよい。
+ * ------------------------------------------------------------------- */
+function getDb(env) {
+  const db = env.DB || env.D1 || env.DATABASE || env.TOKYO_POPULATION;
+  if (!db) throw new Error("D1バインディングが見つかりません（wrangler.toml の binding 名を確認）");
+  return db;
+}
+
+const esc = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+const json = (obj, status = 200) =>
+  new Response(JSON.stringify(obj), {
+    status,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+  });
+
+const bad = (msg) => json({ error: msg }, 400);
+
+/* 日付の形だけ検証する。SQLには必ずバインドで渡す。 */
+const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+const isKey = (s) => /^\d{6,13}$/.test(s || "");
+
+/* ---------------------------------------------------------------------
+ *  データセット情報とビューの解決
+ *    ここが唯一の「文字列からビュー名への変換点」。許可リスト方式。
+ * ------------------------------------------------------------------- */
+const VIEW_BY_GRAIN = { "5y": "v_population_5y", "1y": "v_population_1y" };
+
+async function dataset(env, key) {
+  const row = await getDb(env)
+    .prepare(
+      `SELECT dataset_key, title, granularity, grain_label, muni_code,
+              muni_name, license, attribution
+         FROM datasets
+        WHERE dataset_key = ?1 AND is_public = 1`
+    )
+    .bind(key)
+    .first();
+  if (!row) return null;
+  const view = VIEW_BY_GRAIN[row.granularity];
+  if (!view) return null;
+  return { ...row, view };
+}
+
+/* =====================================================================
+ *  API
+ * ===================================================================== */
+
+/* --- 画面の初期化に要るもの一式 ------------------------------------- */
+async function apiMeta(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+  const db = getDb(env);
+
+  const months = await db
+    .prepare(
+      `SELECT reference_date
+         FROM dataset_periods
+        WHERE dataset_key = ?1 AND obs_rows > 0
+        ORDER BY reference_date`
+    )
+    .bind(ds.dataset_key)
+    .all();
+
+  const list = (months.results || []).map((r) => r.reference_date);
+  const latest = list[list.length - 1];
+
+  /* 町丁一覧は「最新月に実在する町丁」から作る。
+     areas テーブルを引かないのは、1歳階級と5歳階級で町名表記が
+     揺れている（駒場1丁目 / 駒場一丁目）ため。ビュー側に合わせる。 */
+  let areas = { results: [] };
+  if (latest) {
+    areas = await db
+      .prepare(
+        `SELECT key_code, area_name
+           FROM ${ds.view}
+          WHERE reference_date = ?1
+          GROUP BY key_code, area_name
+          ORDER BY key_code`
+      )
+      .bind(latest)
+      .all();
+  }
+
+  const gaps = await db
+    .prepare(
+      `SELECT reference_date, kind, reason
+         FROM dataset_gaps
+        WHERE dataset_key = ?1
+        ORDER BY reference_date`
+    )
+    .bind(ds.dataset_key)
+    .all();
+
+  return json({
+    dataset: {
+      key: ds.dataset_key,
+      title: ds.title,
+      grain_label: ds.grain_label,
+      muni_name: ds.muni_name,
+      license: ds.license,
+      attribution: ds.attribution,
+    },
+    months: list,
+    areas: areas.results || [],
+    gaps: gaps.results || [],
+  });
+}
+
+/* --- ① 人口推移 ------------------------------------------------------ */
+async function apiTrend(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  if (!isDate(from) || !isDate(to)) return bad("期間の指定が不正です");
+
+  /* split=1 で町丁別に分ける。合算すると個々の動きが打ち消し合って消えるので、
+     比較したいときは GROUP BY の粒度そのものを変える必要がある。 */
+  const split = url.searchParams.get("split") === "1";
+
+  const keys = (url.searchParams.get("key_code") || "")
+    .split(",").map((s) => s.trim()).filter(isKey).slice(0, split ? 120 : 20);
+
+  const notes = [
+    ds.view + " を参照（age_class='total' と sex='total' を除外済みのため、SUMしても二重計上にならない）",
+    "measure='population' のみ。世帯数・外国人人口は含まない",
+    "男女を合算した値",
+  ];
+
+  let sql;
+  const params = [from, to];
+
+  if (split) {
+    sql =
+      `SELECT reference_date, key_code, MAX(area_name) AS area_name, SUM(value) AS value\n` +
+      `  FROM ${ds.view}\n` +
+      ` WHERE reference_date BETWEEN ?1 AND ?2`;
+  } else {
+    sql =
+      `SELECT reference_date, SUM(value) AS value, COUNT(DISTINCT key_code) AS areas\n` +
+      `  FROM ${ds.view}\n` +
+      ` WHERE reference_date BETWEEN ?1 AND ?2`;
+  }
+
+  if (keys.length) {
+    const ph = keys.map((_, i) => "?" + (i + 3)).join(", ");
+    sql += `\n   AND key_code IN (${ph})`;
+    params.push(...keys);
+    notes.push(`町丁 ${keys.length} 件に限定`);
+  } else {
+    notes.push(split ? "全町丁（町丁ごとに分けて表示）" : "区全体（全町丁の合計）");
+  }
+
+  if (split) {
+    sql += `\n GROUP BY reference_date, key_code\n ORDER BY key_code, reference_date`;
+    notes.push("町丁ごとに分けて集計。合算していないため、区全体の推移とは別のもの");
+  } else {
+    sql += `\n GROUP BY reference_date\n ORDER BY reference_date`;
+  }
+
+  const rs = await getDb(env).prepare(sql).bind(...params).all();
+
+  /* 期間内に落ちる欠測・系列断絶 */
+  const gaps = await getDb(env)
+    .prepare(
+      `SELECT reference_date, kind, reason
+         FROM dataset_gaps
+        WHERE dataset_key = ?1 AND reference_date BETWEEN ?2 AND ?3
+        ORDER BY reference_date`
+    )
+    .bind(ds.dataset_key, from, to)
+    .all();
+
+  return json({ rows: rs.results || [], split, sql, params, notes, annotations: gaps.results || [] });
+}
+
+/* --- ② 年齢構成 ------------------------------------------------------ */
+async function apiPyramid(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const date = url.searchParams.get("date");
+  if (!isDate(date)) return bad("基準日の指定が不正です");
+
+  const key = url.searchParams.get("key_code") || "";
+  const notes = [
+    ds.view + " を参照",
+    "年齢別は男女別にしか保存されていない（性別合計は葉ノードではないため持たない）",
+  ];
+
+  let sql =
+    `SELECT age_class, sex, SUM(value) AS value\n` +
+    `  FROM ${ds.view}\n` +
+    ` WHERE reference_date = ?1`;
+  const params = [date];
+
+  if (isKey(key)) {
+    sql += `\n   AND key_code = ?2`;
+    params.push(key);
+    notes.push("町丁を1件に限定");
+  } else {
+    notes.push("区全体（全町丁の合計）");
+  }
+  sql += `\n GROUP BY age_class, sex`;
+
+  const rs = await getDb(env).prepare(sql).bind(...params).all();
+  return json({ rows: rs.results || [], sql, params, notes, grain_label: ds.grain_label });
+}
+
+/* --- ③ 増減率ランキング ---------------------------------------------- */
+async function apiRanking(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  if (!isDate(from) || !isDate(to)) return bad("期間の指定が不正です");
+  if (from >= to) return bad("開始日は終了日より前にしてください");
+
+  const sql =
+    `SELECT key_code,\n` +
+    `       MAX(area_name) AS area_name,\n` +
+    `       SUM(CASE WHEN reference_date = ?1 THEN value ELSE 0 END) AS v_from,\n` +
+    `       SUM(CASE WHEN reference_date = ?2 THEN value ELSE 0 END) AS v_to\n` +
+    `  FROM ${ds.view}\n` +
+    ` WHERE reference_date IN (?1, ?2)\n` +
+    ` GROUP BY key_code\n` +
+    `HAVING v_from > 0 AND v_to > 0\n` +
+    ` ORDER BY key_code`;
+
+  const rs = await getDb(env).prepare(sql).bind(from, to).all();
+
+  const rows = (rs.results || []).map((r) => ({
+    ...r,
+    diff: r.v_to - r.v_from,
+    rate: r.v_from ? ((r.v_to - r.v_from) / r.v_from) * 100 : null,
+  }));
+  rows.sort((a, b) => b.rate - a.rate);
+
+  const notes = [
+    ds.view + " を参照",
+    "2時点の比較。間の月は見ていない",
+    "どちらかの時点で0の町丁は除外（町名変更・区画整理で別行になった可能性があるため）",
+    "町名の同一性は key_code で判定。表記が変わっても追える",
+  ];
+
+  /* 2時点の「間」に定義変更や欠測が挟まっていないか。
+     推移グラフは線が跳ねるので目で気づけるが、ランキングは表として
+     整った形で出てしまうため、こちらの方が誤読が起きやすい。
+
+     from ちょうどの日付は含めない。断絶月を起点に取る比較は
+     両端とも新定義なので、そもそも問題が無い。 */
+  const gaps = await getDb(env)
+    .prepare(
+      `SELECT reference_date, kind, reason
+         FROM dataset_gaps
+        WHERE dataset_key = ?1
+          AND reference_date > ?2
+          AND reference_date <= ?3
+        ORDER BY reference_date`
+    )
+    .bind(ds.dataset_key, from, to)
+    .all();
+
+  const breaks = (gaps.results || []).filter((g) => g.kind === "series_break");
+  if (breaks.length) {
+    notes.push(
+      "この期間には定義変更（" +
+        breaks.map((b) => b.reference_date).join("、") +
+        "）が挟まっている。増減率は定義変更分を含む"
+    );
+  }
+
+  return json({
+    rows,
+    sql,
+    params: [from, to],
+    notes,
+    annotations: gaps.results || [],
+    safe_from: breaks.length ? breaks[breaks.length - 1].reference_date : null,
+  });
+}
+
+
+/* --- ④ 季節変動 ------------------------------------------------------
+ *  前計算した季節指数を読むだけ。計算は sql/seasonality*.sql 側で済ませてある。
+ *
+ *  移動平均によるトレンド除去をクエリごとに書くと、条件の微妙な違いで
+ *  数字が変わる。指数はデータの性質なので、画面の操作で揺らいではいけない。
+ *
+ *  mode
+ *    strength  町丁ごとの振幅ランキング
+ *    profile   1町丁の12ヶ月プロファイル
+ *    age       1町丁 × 1暦月の年齢階級別内訳
+ * ------------------------------------------------------------------- */
+const isMonth = (s) => /^(0[1-9]|1[0-2])$/.test(s || "");
+
+async function seasonalityQuery(env, ds, mode, key, month) {
+  /* 指数の読み方はモードによらず同じなので毎回付ける。
+     数字だけが独り歩きすると、10年平均であることも
+     住民票ベースであることも落ちてしまう。 */
+  const notes = [
+    "季節指数は 2×12 移動平均でトレンドを除去した比率の暦月平均。0% が年間の平均的な水準",
+    "2012-08 の系列断絶以降のみを対象にした。それ以前は総人口の定義が異なるため接続できない",
+    "移動平均の窓（前後6ヶ月）に欠測を含む月は集計から除外。n_years が 10〜12 とばらつくのはこのため",
+    "n_above は n_years のうち指数が 0% を上回った年数。10年中5年程度なら偶然と区別がつかない",
+    "住民基本台帳の異動を集計したもので、実際の居住実態とは異なる場合がある",
+  ];
+
+  let sql, params;
+
+  if (mode === "strength") {
+    sql =
+      `SELECT s.key_code, s.area_name, s.amplitude_pct,
+` +
+      `       s.peak_month, s.peak_pct, s.trough_month, s.trough_pct
+` +
+      `  FROM v_nl_seasonality_strength s
+` +
+      `  JOIN areas a ON a.key_code = s.key_code
+` +
+      ` WHERE a.muni_code = ?1
+` +
+      ` ORDER BY s.amplitude_pct DESC
+` +
+      ` LIMIT 20`;
+    params = [ds.muni_code];
+    notes.push("振幅は年間で最も高い月と最も低い月の差。上位20件のみ表示");
+  } else if (mode === "profile") {
+    sql =
+      `SELECT month, seasonal_index, pct_vs_trend, n_above, n_years
+` +
+      `  FROM v_nl_seasonality
+` +
+      ` WHERE key_code = ?1
+` +
+      ` ORDER BY month`;
+    params = [key];
+  } else {
+    sql =
+      `SELECT age_class, age_order, pct_vs_trend, n_above, n_years
+` +
+      `  FROM v_nl_seasonality_age
+` +
+      ` WHERE key_code = ?1 AND month = ?2
+` +
+      ` ORDER BY age_order`;
+    params = [key, month];
+    notes.push(
+      "年齢不詳は除外している。トレンドが20人未満の階級も、1人の増減で比率が跳ねるため対象外"
+    );
+  }
+
+  const rs = await getDb(env).prepare(sql).bind(...params).all();
+  const rows = rs.results || [];
+
+  if (!rows.length) {
+    notes.push("該当する行がない。小規模な町丁や階級は算出対象から外れている可能性がある");
+  }
+
+  return { sql, params, rows, notes };
+}
+
+/* 集計本体と、それを Response にする層を分ける。
+   要件5・6のエンドポイントが同じ集計を再利用するため。 */
+async function apiSeasonality(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const mode = url.searchParams.get("mode") || "strength";
+  const key = url.searchParams.get("key_code") || "";
+  const month = url.searchParams.get("month") || "09";
+  if (mode !== "strength" && !isKey(key)) return bad("町丁を指定してください");
+  if (mode === "age" && !isMonth(month)) return bad("月の指定が不正です");
+
+  const q = await seasonalityQuery(env, ds, mode, key, month);
+  const { sql, params, rows, notes } = q;
+
+  /* 断絶・欠測は特定の期間ではなく指数そのものに効くので、
+     ランキングのように期間で絞らず 2012-08 以降を全部渡す。 */
+  const gaps = await getDb(env)
+    .prepare(
+      `SELECT reference_date, kind, reason
+         FROM dataset_gaps
+        WHERE dataset_key = ?1
+          AND reference_date >= '2012-08-01'
+        ORDER BY reference_date`
+    )
+    .bind(ds.dataset_key)
+    .all();
+
+  /* 未解決の既知の問題。年齢階級別の数値に直接効くので画面に出す。 */
+  const issues = await getDb(env)
+    .prepare(
+      `SELECT title, detail, severity
+         FROM known_issues
+        WHERE dataset_key = ?1 AND resolved_at IS NULL
+        ORDER BY issue_id`
+    )
+    .bind(ds.dataset_key)
+    .all();
+
+  return json({
+    mode,
+    month,
+    rows,
+    sql,
+    params,
+    notes,
+    annotations: (gaps.results || []).filter((g) => g.kind !== "series_break"),
+    issues: issues.results || [],
+  });
+}
+
+
+/* --- 要件5・6 事実の要約と示唆 ---------------------------------------
+ *
+ *  集計とは別のエンドポイントにしている。集計は数十msで返るのに
+ *  LLMは数秒かかるので、同じ応答に載せると表の描画まで待たされる。
+ *
+ *  流れ:
+ *    1. 季節変動と同じ集計を実行（決定論）
+ *    2. 順位・最大値・件数を JS で算出して事実の構造体を作る（決定論）
+ *    3. 要件5：構造体 → 事実の記述（LLM）
+ *    4. 出力の数値を検証。渡していない数値があれば表示しない
+ *    5. 要件6：要件5の出力 → 示唆（LLM）
+ *
+ *  LLMは行データに触れない。構造体だけを見る。
+ * ------------------------------------------------------------------- */
+async function apiInsight(env, url) {
+  const ds = await dataset(env, url.searchParams.get("dataset") || "");
+  if (!ds) return bad("データセットが見つかりません");
+
+  const mode = url.searchParams.get("mode") || "strength";
+  const key = url.searchParams.get("key_code") || "";
+  const month = url.searchParams.get("month") || "09";
+  if (mode !== "strength" && !isKey(key)) return bad("町丁を指定してください");
+  if (mode === "age" && !isMonth(month)) return bad("月の指定が不正です");
+
+  const q = await seasonalityQuery(env, ds, mode, key, month);
+  if (!q.rows.length) return json({ skipped: "対象データがありません" });
+
+  /* 対象の呼び名も決定論で作る。LLMに町丁名を組み立てさせない。 */
+  let scopeLabel = ds.muni_name + "全域";
+  if (mode !== "strength") {
+    const a = await getDb(env)
+      .prepare(`SELECT area_name FROM areas WHERE key_code = ?1`)
+      .bind(key).first();
+    scopeLabel = ds.muni_name + " " + (a ? a.area_name : key);
+  }
+
+  /* caveats はSQL側で確定させる。LLMに気づかせない。 */
+  const gaps = await getDb(env)
+    .prepare(
+      `SELECT reference_date, kind, reason
+         FROM dataset_gaps
+        WHERE dataset_key = ?1 AND reference_date >= '2012-08-01'
+        ORDER BY reference_date`
+    ).bind(ds.dataset_key).all();
+
+  const issues = await getDb(env)
+    .prepare(
+      `SELECT title FROM known_issues
+        WHERE dataset_key = ?1 AND resolved_at IS NULL ORDER BY issue_id`
+    ).bind(ds.dataset_key).all();
+
+  const caveats = [
+    "住民基本台帳の異動を集計したもので、実際の居住実態とは異なる場合がある",
+    "2012-08 の系列断絶以降のみを対象にしている",
+    "移動平均の窓に欠測を含む月は集計から除外しているため、暦月ごとに対象年数が異なる",
+  ];
+  (gaps.results || []).forEach((g) => {
+    if (g.kind !== "series_break") caveats.push(g.reference_date.slice(0, 7) + " は欠測");
+  });
+  (issues.results || []).forEach((i) => caveats.push("既知の問題: " + i.title));
+  if (mode === "age") {
+    caveats.push("外国人人口は2026-04以降の5ヶ月分しか収録がなく、国籍別の季節変動は算出できない");
+  }
+
+  const facts = buildFacts(mode, q.rows, {
+    scopeLabel,
+    month,
+    coverage: "2012-08 〜 2026-08 のうち移動平均の窓が揃う月",
+  });
+
+  const meta = { mode, dataset: ds.dataset_key };
+
+  /* --- 要件5 -------------------------------------------------------- */
+  let fact, check;
+  try {
+    fact = await callClaude(env, {
+      system: SYS_FACT,
+      messages: [{ role: "user", content: userFact(facts, caveats) }],
+      model: MODELS.fact,
+      maxTokens: 700,
+      metadata: { ...meta, req: "5" },
+    });
+    check = verifyNumbers(fact.text, facts, caveats);
+
+    /* 一度だけ、より強い指示で書き直させる。
+       それでも通らなければ表示しない。数字を作った文章を出すより空白の方がよい。 */
+    if (!check.ok) {
+      fact = await callClaude(env, {
+        system: SYS_FACT,
+        messages: [
+          { role: "user", content: userFact(facts, caveats) },
+          { role: "assistant", content: fact.text },
+          {
+            role: "user",
+            content:
+              "次の数値はデータに存在しません: " + check.bad.join(", ") +
+              "。データにある数値だけを使い、書き直してください。計算・丸めをしないこと。",
+          },
+        ],
+        model: MODELS.fact,
+        maxTokens: 700,
+        cacheTtl: 0,
+        metadata: { ...meta, req: "5", retry: "1" },
+      });
+      check = verifyNumbers(fact.text, facts, caveats);
+    }
+  } catch (e) {
+    return json({ error: "要約の生成に失敗しました: " + e.message, facts, caveats }, 200);
+  }
+
+  if (!check.ok) {
+    return json({
+      facts, caveats,
+      rejected: {
+        reason: "生成された文章に、渡していない数値が含まれていました",
+        numbers: check.bad,
+      },
+      trace: { fact_log_id: fact.logId },
+    });
+  }
+
+  /* --- 要件6 -------------------------------------------------------- */
+  let ins = null, insErr = null;
+  try {
+    const r = await callClaudeJson(env, {
+      system: SYS_INSIGHT,
+      messages: [{ role: "user", content: userInsight(fact.text, facts, caveats) }],
+      model: MODELS.insight,
+      maxTokens: 800,
+      metadata: { ...meta, req: "6" },
+    });
+    ins = { ...r.json, logId: r.logId, cacheStatus: r.cacheStatus, model: r.model };
+  } catch (e) {
+    insErr = e.message;
+  }
+
+  return json({
+    fact: {
+      text: fact.text,
+      logId: fact.logId,
+      cacheStatus: fact.cacheStatus,
+      model: fact.model,
+      elapsedMs: fact.elapsedMs,
+    },
+    insight: ins,
+    insightError: insErr,
+    facts,
+    caveats,
+    verified: true,
+  });
+}
+
+/* =====================================================================
+ *  画面
+ *    描画はクライアント側で決定論的に行う。AIは一切通らない。
+ * ===================================================================== */
+function analyzePage(datasetKey) {
+  return `<!DOCTYPE html><html lang="ja"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>集計・可視化</title>
+<style>
+:root{--fg:#1a1a1a;--mut:#6b6b6b;--line:#e0ddd6;--bg:#faf9f7;--acc:#2b5a8a;--warn:#b4552d}
+*{box-sizing:border-box}
+body{margin:0;padding:24px;font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;
+     color:var(--fg);background:var(--bg);line-height:1.7}
+.wrap{max-width:960px;margin:0 auto}
+h1{font-size:1.3rem;margin:0 0 4px}
+.sub{color:var(--mut);font-size:.85rem;margin-bottom:20px}
+.tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin-bottom:18px;flex-wrap:wrap}
+.tab{padding:8px 16px;border:0;background:none;cursor:pointer;font:inherit;font-size:.9rem;
+     color:var(--mut);border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab[aria-selected=true]{color:var(--acc);border-bottom-color:var(--acc);font-weight:600}
+.panel{display:none}.panel.on{display:block}
+.ctl{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+label{display:block;font-size:.75rem;color:var(--mut);margin-bottom:3px}
+select,button.go{font:inherit;font-size:.85rem;padding:6px 8px;border:1px solid var(--line);
+                 border-radius:4px;background:#fff}
+select[multiple]{min-width:200px;height:110px}
+select:disabled{background:#f2f0ec;color:#a9a29a}
+.radios{display:flex;gap:12px;padding-bottom:5px}
+label.rd{display:flex;align-items:center;gap:4px;font-size:.85rem;color:var(--fg);margin:0;cursor:pointer}
+label.rd input{margin:0}
+button.mini{font:inherit;font-size:.72rem;padding:3px 8px;margin-top:4px;border:1px solid var(--line);
+            border-radius:4px;background:#fff;color:var(--mut);cursor:pointer;display:block}
+button.mini:disabled{opacity:.4;cursor:default}
+button.go{background:var(--acc);color:#fff;border-color:var(--acc);cursor:pointer;padding:7px 18px}
+.card{background:#fff;border:1px solid var(--line);border-radius:6px;padding:16px;margin-bottom:14px}
+svg{display:block;width:100%;height:auto}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right}
+th:nth-child(-n+2),td:nth-child(-n+2){text-align:left}
+th{color:var(--mut);font-weight:600;font-size:.75rem}
+.up{color:var(--acc)}.dn{color:var(--warn)}
+details{font-size:.8rem;color:var(--mut);margin-top:10px}
+summary{cursor:pointer}
+pre{background:#f4f2ee;padding:10px;border-radius:4px;overflow-x:auto;font-size:.75rem;line-height:1.5}
+ul.notes{margin:8px 0 0;padding-left:1.2em}
+.flag{background:#fdf4ee;border-left:3px solid var(--warn);padding:8px 12px;font-size:.8rem;margin-bottom:12px}
+.attr{font-size:.75rem;color:var(--mut);border-top:1px solid var(--line);padding-top:12px;margin-top:24px}
+svg.bar{display:inline-block;width:260px;height:14px}
+svg.abar{display:inline-block;width:170px;height:10px}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.mut{color:var(--mut)}
+.lnk{background:none;border:0;padding:0;font:inherit;color:var(--acc);cursor:pointer;text-decoration:underline}
+h3.sec{font-size:.95rem;margin:0 0 4px}
+.tip{position:fixed;pointer-events:none;background:#26221c;color:#fff;font-size:.72rem;
+     padding:6px 9px;border-radius:4px;z-index:50;white-space:nowrap;opacity:0;line-height:1.5;
+     box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.tip.on{opacity:1}
+.tip b{font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:10px}
+.pnl{border:1px solid var(--line);border-radius:5px;padding:8px 8px 6px;background:#fff}
+.pnl h4{font-size:.78rem;margin:0 0 2px;font-weight:600}
+.pnl h4 button{background:none;border:0;padding:0;font:inherit;color:var(--acc);
+               cursor:pointer;text-decoration:underline}
+.lg{font-size:.65rem;color:var(--mut);display:flex;flex-wrap:wrap;gap:7px;margin-top:3px}
+.lg span{display:flex;align-items:center;gap:3px}
+.lg i{display:inline-block;width:9px;height:3px;border-radius:1px}
+.ai{border-radius:6px;padding:14px 16px;margin-bottom:14px}
+.ai h4{font-size:.8rem;margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.ai h4 em{font-style:normal;font-size:.68rem;font-weight:400;color:var(--mut)}
+.ai p{margin:0;font-size:.88rem}
+.ai5{background:#fff;border:1px solid var(--line);border-left:3px solid var(--acc)}
+.ai6{background:#f6f3ee;border:1px solid #e3ddd2;border-left:3px dashed var(--warn)}
+.ai6 .sub2{margin-top:8px;font-size:.78rem;color:#5c554c}
+.ai6 .sub2 b{font-weight:600}
+.aibadge{font-size:.62rem;padding:1px 6px;border-radius:8px;background:var(--acc);color:#fff}
+.ai6 .aibadge{background:var(--warn)}
+.airej{background:#fdf4ee;border:1px solid #e8d3c2;border-left:3px solid var(--warn)}
+.busy{color:var(--mut);font-size:.85rem}
+</style></head><body><div class="wrap">
+
+<h1 id="ttl">読み込み中…</h1>
+<div class="sub"><a href="/dataset/${esc(datasetKey)}">データセット詳細へ戻る</a></div>
+
+<div class="tabs" role="tablist">
+  <button class="tab" role="tab" data-p="trend" aria-selected="true">人口推移</button>
+  <button class="tab" role="tab" data-p="pyramid" aria-selected="false">年齢構成</button>
+  <button class="tab" role="tab" data-p="rank" aria-selected="false">増減率ランキング</button>
+  <button class="tab" role="tab" data-p="season" aria-selected="false">季節変動</button>
+</div>
+
+<section class="panel on" id="p-trend">
+  <div class="ctl">
+    <div><label>開始</label><select id="t-from"></select></div>
+    <div><label>終了</label><select id="t-to"></select></div>
+    <div class="scope">
+      <label>対象</label>
+      <div class="radios">
+        <label class="rd"><input type="radio" name="t-scope" value="all" checked> 区全体</label>
+        <label class="rd"><input type="radio" name="t-scope" value="pick"> 町丁を選ぶ</label>
+      </div>
+    </div>
+    <div><label>町丁（Ctrlクリックで複数）</label>
+      <select id="t-area" multiple disabled></select>
+      <button type="button" class="mini" id="t-clear">選択を解除</button>
+    </div>
+    <div><label>表示</label>
+      <select id="t-view">
+        <option value="sum">合算（1本の線）</option>
+        <option value="split">町丁別に並べる</option>
+      </select>
+    </div>
+    <div><label>縦軸</label>
+      <select id="t-scale" disabled>
+        <option value="each">パネルごとに最適化</option>
+        <option value="same">全パネル共通</option>
+        <option value="index">指数（起点=100）</option>
+      </select>
+    </div>
+    <button class="go" id="t-go">描画</button>
+  </div>
+  <div id="t-out"></div>
+</section>
+
+<section class="panel" id="p-pyramid">
+  <div class="ctl">
+    <div><label>基準日</label><select id="y-date"></select></div>
+    <div><label>町丁</label><select id="y-area"></select></div>
+    <button class="go" id="y-go">描画</button>
+  </div>
+  <div id="y-out"></div>
+</section>
+
+<section class="panel" id="p-rank">
+  <div class="ctl">
+    <div><label>比較開始</label><select id="r-from"></select></div>
+    <div><label>比較終了</label><select id="r-to"></select></div>
+    <button class="go" id="r-go">集計</button>
+  </div>
+  <div id="r-out"></div>
+</section>
+
+<section class="panel" id="p-season">
+  <div class="ctl">
+    <div><label>表示</label>
+      <select id="s-mode">
+        <option value="strength">振幅ランキング（町丁）</option>
+        <option value="profile">12ヶ月プロファイル</option>
+        <option value="age">年齢階級別の内訳</option>
+      </select>
+    </div>
+    <div><label>町丁</label><select id="s-area" disabled></select></div>
+    <div><label>月</label><select id="s-month" disabled></select></div>
+    <button class="go" id="s-go">集計</button>
+  </div>
+  <div id="s-out"></div>
+</section>
+
+<div class="attr" id="attr"></div>
+</div>
+<script>
+var DS = ${JSON.stringify(datasetKey)};
+var META = null;
+
+function $(id){ return document.getElementById(id); }
+function fmt(n){ return (n===null||n===undefined) ? "-" : Number(n).toLocaleString("ja-JP"); }
+function el(tag, attrs, text){
+  var e = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (var k in attrs) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+function svgRoot(w, h){
+  var s = el("svg", {viewBox: "0 0 " + w + " " + h, preserveAspectRatio: "xMidYMid meet"});
+  return s;
+}
+function api(path){
+  return fetch(path, {credentials: "same-origin"}).then(function(r){
+    if (!r.ok) return r.json().then(function(j){ throw new Error(j.error || ("HTTP " + r.status)); });
+    return r.json();
+  });
+}
+function fill(sel, arr, valKey, labKey, selected){
+  sel.innerHTML = "";
+  arr.forEach(function(o){
+    var op = document.createElement("option");
+    op.value = valKey ? o[valKey] : o;
+    op.textContent = labKey ? o[labKey] : o;
+    if (op.value === selected) op.selected = true;
+    sel.appendChild(op);
+  });
+}
+function meta(box, d){
+  var w = document.createElement("details");
+  var s = document.createElement("summary");
+  s.textContent = "実行したSQLと適用したルール";
+  w.appendChild(s);
+  var ul = document.createElement("ul");
+  ul.className = "notes";
+  (d.notes || []).forEach(function(n){
+    var li = document.createElement("li"); li.textContent = n; ul.appendChild(li);
+  });
+  w.appendChild(ul);
+  var pre = document.createElement("pre");
+  pre.textContent = d.sql + "\\n\\n-- パラメータ: " + JSON.stringify(d.params);
+  w.appendChild(pre);
+  box.appendChild(w);
+}
+function card(html){
+  var c = document.createElement("div"); c.className = "card";
+  if (html) c.innerHTML = html;
+  return c;
+}
+
+/* ---------- ツールチップ ----------
+   SVG は viewBox で拡縮されるので、画面座標をそのまま使えない。
+   getBoundingClientRect で実寸を取って viewBox の座標系に戻す。 */
+var TIP = null;
+function tipEl(){
+  if (!TIP){ TIP = document.createElement("div"); TIP.className = "tip"; document.body.appendChild(TIP); }
+  return TIP;
+}
+function tipShow(html, ev){
+  var t = tipEl();
+  t.innerHTML = html;
+  t.classList.add("on");
+  var x = ev.clientX + 14, y = ev.clientY + 14;
+  var w = t.offsetWidth, h = t.offsetHeight;
+  if (x + w > window.innerWidth - 8) x = ev.clientX - w - 14;
+  if (y + h > window.innerHeight - 8) y = ev.clientY - h - 14;
+  t.style.left = x + "px"; t.style.top = y + "px";
+}
+function tipHide(){ if (TIP) TIP.classList.remove("on"); }
+
+/* プロット領域に透明な受け皿を置き、横位置から最寄りの月を引く。
+   点ごとに当たり判定を作らないのは、月次195点だと点が小さすぎて拾えないため。 */
+function attachHover(s, W, H, ml, mt, pw, ph, n, render){
+  if (n < 1) return;
+  var hit = el("rect", {x: ml, y: mt, width: pw, height: ph, fill: "transparent"});
+  var vline = el("line", {x1: ml, y1: mt, x2: ml, y2: mt + ph,
+                          stroke: "#b4552d", "stroke-width": 1, opacity: 0});
+  s.appendChild(vline);
+  s.appendChild(hit);
+  hit.addEventListener("mousemove", function(ev){
+    var r = s.getBoundingClientRect();
+    var vx = (ev.clientX - r.left) / r.width * W;
+    var i = n < 2 ? 0 : Math.round((vx - ml) / pw * (n - 1));
+    if (i < 0) i = 0; if (i > n - 1) i = n - 1;
+    var px = ml + (n < 2 ? pw / 2 : pw * i / (n - 1));
+    vline.setAttribute("x1", px); vline.setAttribute("x2", px);
+    vline.setAttribute("opacity", 1);
+    tipShow(render(i), ev);
+  });
+  hit.addEventListener("mouseleave", function(){
+    vline.setAttribute("opacity", 0);
+    tipHide();
+  });
+}
+
+/* ---------- ①b 町丁別トレリス ----------
+   「○N丁目」を分解して町ごとのパネルにまとめ、丁目を色で分ける。
+   88町丁をそのまま並べると読めないが、町でまとめると25前後に収まる。 */
+var PAL = ["#2b5a8a", "#b4552d", "#4a7c59", "#8a5a9e", "#c19a2e", "#3f7d8c", "#a8455f"];
+
+function townOf(name){
+  var m = String(name).match(/^(.*?)(\d+)丁目$/);
+  return m ? {town: m[1], no: parseInt(m[2], 10)} : {town: String(name), no: 0};
+}
+
+function drawTrendSplit(d, box){
+  var rows = d.rows;
+  if (!rows.length){ box.appendChild(card("<p>該当する町丁がありません。</p>")); return; }
+
+  var scale = $("t-scale").value;
+
+  /* 日付軸を先に確定させる。町丁によって欠測があっても横軸を揃えるため。 */
+  var dset = {}, dates = [];
+  rows.forEach(function(r){ if (!(r.reference_date in dset)){ dset[r.reference_date] = 1; dates.push(r.reference_date); } });
+  dates.sort();
+  var di = {}; dates.forEach(function(dt, i){ di[dt] = i; });
+
+  var byKey = {};
+  rows.forEach(function(r){
+    if (!byKey[r.key_code]){
+      var t = townOf(r.area_name);
+      byKey[r.key_code] = {key: r.key_code, name: r.area_name, town: t.town, no: t.no,
+                           v: new Array(dates.length)};
+    }
+    byKey[r.key_code].v[di[r.reference_date]] = r.value;
+  });
+
+  var series = Object.keys(byKey).map(function(k){ return byKey[k]; });
+
+  /* 指数化は規模の違いを消す。人口300人の町丁と6000人の町丁を
+     同じ軸に乗せると、前者の動きは目で見えない。 */
+  if (scale === "index"){
+    series.forEach(function(s){
+      var base = null;
+      for (var i = 0; i < s.v.length; i++){ if (s.v[i] != null){ base = s.v[i]; break; } }
+      s.idx = s.v.map(function(x){ return (x == null || !base) ? null : x / base * 100; });
+    });
+  }
+
+  var pick = function(s){ return scale === "index" ? s.idx : s.v; };
+
+  var gLo = Infinity, gHi = -Infinity;
+  series.forEach(function(s){
+    pick(s).forEach(function(x){ if (x != null){ if (x < gLo) gLo = x; if (x > gHi) gHi = x; } });
+  });
+
+  /* 町ごとにまとめる。丁目番号順に並べる。 */
+  var towns = {}, order = [];
+  series.forEach(function(s){
+    if (!towns[s.town]){ towns[s.town] = []; order.push(s.town); }
+    towns[s.town].push(s);
+  });
+  order.sort();
+  order.forEach(function(t){ towns[t].sort(function(a, b){ return a.no - b.no; }); });
+
+  var wrap = document.createElement("div");
+  wrap.className = "grid";
+
+  var W = 300, H = 132, ml = 38, mr = 6, mt = 8, mb = 16;
+  var pw = W - ml - mr, ph = H - mt - mb;
+
+  order.forEach(function(tname){
+    var ss = towns[tname];
+    var lo = gLo, hi = gHi;
+    if (scale === "each"){
+      lo = Infinity; hi = -Infinity;
+      ss.forEach(function(s){
+        pick(s).forEach(function(x){ if (x != null){ if (x < lo) lo = x; if (x > hi) hi = x; } });
+      });
+    }
+    var pad = (hi - lo) * 0.12 || 10;
+    lo -= pad; hi += pad;
+
+    var x = function(i){ return ml + (dates.length < 2 ? pw / 2 : pw * i / (dates.length - 1)); };
+    var y = function(v){ return mt + ph - ph * (v - lo) / (hi - lo); };
+
+    var s = svgRoot(W, H);
+    for (var g = 0; g <= 2; g++){
+      var vy = mt + ph * g / 2, vv = hi - (hi - lo) * g / 2;
+      s.appendChild(el("line", {x1: ml, y1: vy, x2: W - mr, y2: vy, stroke: "#eeebe4"}));
+      s.appendChild(el("text", {x: ml - 5, y: vy + 3.5, "text-anchor": "end",
+                                "font-size": 9, fill: "#8a847c"},
+                       Math.round(vv).toLocaleString("ja-JP")));
+    }
+
+    /* 欠測・定義変更の縦線。小さいパネルでも消さない。 */
+    (d.annotations || []).forEach(function(a){
+      var i = di[a.reference_date], px;
+      if (i !== undefined){ px = x(i); }
+      else {
+        var af = -1;
+        for (var k = 0; k < dates.length; k++){ if (dates[k] > a.reference_date){ af = k; break; } }
+        if (af <= 0) return;
+        px = (x(af - 1) + x(af)) / 2;
+      }
+      s.appendChild(el("line", {x1: px, y1: mt, x2: px, y2: mt + ph,
+                                stroke: a.kind === "series_break" ? "#d9a48a" : "#d5d0c8",
+                                "stroke-width": 1, "stroke-dasharray": "3 2"}));
+    });
+
+    ss.forEach(function(sr, k){
+      var col = PAL[(sr.no ? sr.no - 1 : k) % PAL.length];
+      var vv = pick(sr), dpath = "", pen = false;
+      for (var i = 0; i < vv.length; i++){
+        if (vv[i] == null){ pen = false; continue; }
+        dpath += (pen ? " L" : " M") + x(i) + " " + y(vv[i]);
+        pen = true;
+      }
+      s.appendChild(el("path", {d: dpath, fill: "none", stroke: col, "stroke-width": 1.4}));
+    });
+
+    s.appendChild(el("text", {x: ml, y: H - 4, "font-size": 9, fill: "#8a847c"},
+                     dates[0].slice(0, 7)));
+    s.appendChild(el("text", {x: W - mr, y: H - 4, "text-anchor": "end",
+                              "font-size": 9, fill: "#8a847c"},
+                     dates[dates.length - 1].slice(0, 7)));
+
+    attachHover(s, W, H, ml, mt, pw, ph, dates.length, function(i){
+      var h = "<b>" + dates[i].slice(0, 7) + "</b>";
+      ss.forEach(function(sr, k){
+        var col = PAL[(sr.no ? sr.no - 1 : k) % PAL.length];
+        var raw = sr.v[i];
+        var shown = scale === "index"
+          ? (sr.idx[i] == null ? "-" : sr.idx[i].toFixed(1) + " <span style='opacity:.7'>(" + fmt(raw) + "人)</span>")
+          : (raw == null ? "-" : fmt(raw) + "人");
+        h += "<br><i style='display:inline-block;width:8px;height:3px;background:" + col
+           + ";vertical-align:middle;margin-right:4px'></i>" + sr.name + " " + shown;
+      });
+      return h;
+    });
+
+    var pnl = document.createElement("div");
+    pnl.className = "pnl";
+    var h4 = document.createElement("h4");
+    var btn = document.createElement("button");
+    btn.textContent = tname;
+    btn.title = tname + " だけを選択して再描画";
+    btn.addEventListener("click", function(){
+      var want = {}; ss.forEach(function(sr){ want[sr.key] = 1; });
+      document.querySelector("input[name=t-scope][value=pick]").checked = true;
+      syncScope();
+      [].slice.call($("t-area").options).forEach(function(o){ o.selected = !!want[o.value]; });
+      run("trend");
+    });
+    h4.appendChild(btn);
+    pnl.appendChild(h4);
+    pnl.appendChild(s);
+
+    if (ss.length > 1){
+      var lg = document.createElement("div");
+      lg.className = "lg";
+      ss.forEach(function(sr, k){
+        var col = PAL[(sr.no ? sr.no - 1 : k) % PAL.length];
+        var sp = document.createElement("span");
+        sp.innerHTML = "<i style='background:" + col + "'></i>" + (sr.no ? sr.no + "丁目" : sr.name);
+        lg.appendChild(sp);
+      });
+      pnl.appendChild(lg);
+    }
+    wrap.appendChild(pnl);
+  });
+
+  var c = card("");
+  var lead = document.createElement("p");
+  lead.style.fontSize = ".8rem"; lead.style.margin = "0 0 10px";
+  lead.className = "mut";
+  lead.textContent = series.length + " 町丁を " + order.length + " の町にまとめました。"
+    + (scale === "each" ? "縦軸はパネルごとに最適化しているため、パネル間で高さを比べられません。"
+     : scale === "same" ? "縦軸は全パネル共通です。小規模な町丁の動きは見えにくくなります。"
+     : "各町丁の起点を100とした指数です。規模の違いを除いて変化率を比べられます。")
+    + "町名を押すとその町だけを選択します。";
+  c.appendChild(lead);
+  c.appendChild(wrap);
+
+  (d.annotations || []).forEach(function(a){
+    var f = document.createElement("div");
+    f.className = "flag";
+    f.textContent = a.reference_date.slice(0, 7) + "："
+      + (a.kind === "series_break" ? "定義変更あり。" : a.kind === "upstream_missing" ? "上流に存在しない欠測。" : "取込未完了。")
+      + a.reason;
+    c.insertBefore(f, c.firstChild);
+  });
+  box.appendChild(c);
+}
+
+/* ---------- ① 推移 ---------- */
+function drawTrend(d, box){
+  if (d.split){ drawTrendSplit(d, box); return; }
+  var rows = d.rows;
+  if (!rows.length){ box.appendChild(card("<p>該当する月がありません。</p>")); return; }
+
+  var W = 900, H = 360, ml = 70, mr = 20, mt = 20, mb = 46;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var vals = rows.map(function(r){ return r.value; });
+  var lo = Math.min.apply(null, vals), hi = Math.max.apply(null, vals);
+  var pad = (hi - lo) * 0.1 || 100;
+  lo = lo - pad; hi = hi + pad;
+
+  var x = function(i){ return ml + (rows.length < 2 ? pw/2 : pw * i / (rows.length - 1)); };
+  var y = function(v){ return mt + ph - ph * (v - lo) / (hi - lo); };
+
+  var s = svgRoot(W, H);
+
+  for (var g = 0; g <= 4; g++){
+    var vy = mt + ph * g / 4, vv = hi - (hi - lo) * g / 4;
+    s.appendChild(el("line", {x1: ml, y1: vy, x2: W - mr, y2: vy, stroke: "#eae7e0"}));
+    s.appendChild(el("text", {x: ml - 8, y: vy + 4, "text-anchor": "end",
+                              "font-size": 11, fill: "#6b6b6b"}, Math.round(vv).toLocaleString("ja-JP")));
+  }
+
+  /* 欠測・系列断絶。線を引く前に描いて背面に置く */
+  var idxOf = {};
+  rows.forEach(function(r, i){ idxOf[r.reference_date] = i; });
+  (d.annotations || []).forEach(function(a){
+    var i = idxOf[a.reference_date];
+    var px;
+    if (i !== undefined) { px = x(i); }
+    else {
+      var after = -1;
+      for (var k = 0; k < rows.length; k++){ if (rows[k].reference_date > a.reference_date){ after = k; break; } }
+      if (after <= 0) return;
+      px = (x(after - 1) + x(after)) / 2;
+    }
+    var col = a.kind === "series_break" ? "#b4552d" : "#a9a29a";
+    s.appendChild(el("line", {x1: px, y1: mt, x2: px, y2: mt + ph,
+                              stroke: col, "stroke-width": 1.5, "stroke-dasharray": "4 3"}));
+    s.appendChild(el("text", {x: px + 4, y: mt + 12, "font-size": 10, fill: col},
+                     a.kind === "series_break" ? "定義変更" : "欠測"));
+  });
+
+  var dpath = rows.map(function(r, i){ return (i ? "L" : "M") + x(i) + " " + y(r.value); }).join(" ");
+  s.appendChild(el("path", {d: dpath, fill: "none", stroke: "#2b5a8a", "stroke-width": 1.8}));
+
+  var step = Math.max(1, Math.ceil(rows.length / 8));
+  rows.forEach(function(r, i){
+    if (i % step === 0 || i === rows.length - 1){
+      s.appendChild(el("text", {x: x(i), y: H - 16, "text-anchor": "middle",
+                                "font-size": 11, fill: "#6b6b6b"}, r.reference_date.slice(0, 7)));
+    }
+  });
+
+  attachHover(s, W, H, ml, mt, pw, ph, rows.length, function(i){
+    return "<b>" + rows[i].reference_date.slice(0, 7) + "</b><br>"
+         + fmt(rows[i].value) + "\u4eba";
+  });
+
+  var c = card("");
+  c.appendChild(s);
+  var first = rows[0], last = rows[rows.length - 1];
+  var diff = last.value - first.value;
+  var rate = first.value ? (diff / first.value * 100) : 0;
+  var p = document.createElement("p");
+  p.style.fontSize = ".85rem"; p.style.margin = "12px 0 0";
+  p.textContent = first.reference_date + " の " + fmt(first.value) + "人 から "
+                + last.reference_date + " の " + fmt(last.value) + "人へ、"
+                + (diff >= 0 ? "+" : "") + fmt(diff) + "人（"
+                + (rate >= 0 ? "+" : "") + rate.toFixed(2) + "％）。対象 " + rows.length + " か月、"
+                + fmt(last.areas) + " 町丁。";
+  c.appendChild(p);
+
+  if ((d.annotations || []).length){
+    (d.annotations || []).forEach(function(a){
+      var f = document.createElement("div");
+      f.className = "flag";
+      f.textContent = a.reference_date.slice(0, 7) + "："
+        + (a.kind === "series_break" ? "定義変更あり。" : a.kind === "upstream_missing" ? "上流に存在しない欠測。" : "取込未完了。")
+        + a.reason;
+      c.insertBefore(f, c.firstChild);
+    });
+  }
+  box.appendChild(c);
+}
+
+/* ---------- ② 年齢構成 ---------- */
+function ageKey(a){
+  if (a === "unknown" || a === "不詳") return 9999;
+  var m = String(a).match(/^(\\d+)/);
+  return m ? parseInt(m[1], 10) : 9998;
+}
+function drawPyramid(d, box){
+  var byAge = {};
+  d.rows.forEach(function(r){
+    if (!byAge[r.age_class]) byAge[r.age_class] = {male: 0, female: 0};
+    if (r.sex === "male" || r.sex === "female") byAge[r.age_class][r.sex] += r.value;
+  });
+  var ages = Object.keys(byAge).sort(function(a, b){ return ageKey(a) - ageKey(b); });
+  if (!ages.length){ box.appendChild(card("<p>該当する行がありません。</p>")); return; }
+
+  var rowH = ages.length > 40 ? 8 : 18;
+  var W = 900, H = ages.length * rowH + 60, cx = W / 2, half = 340, mt = 30;
+  var mx = 0;
+  ages.forEach(function(a){ mx = Math.max(mx, byAge[a].male, byAge[a].female); });
+  var s = svgRoot(W, H);
+
+  s.appendChild(el("text", {x: cx - half / 2, y: 16, "text-anchor": "middle",
+                            "font-size": 12, fill: "#6b6b6b"}, "男"));
+  s.appendChild(el("text", {x: cx + half / 2, y: 16, "text-anchor": "middle",
+                            "font-size": 12, fill: "#6b6b6b"}, "女"));
+
+  ages.forEach(function(a, i){
+    var yy = mt + i * rowH;
+    var mw = mx ? half * byAge[a].male / mx : 0;
+    var fw = mx ? half * byAge[a].female / mx : 0;
+    s.appendChild(el("rect", {x: cx - 30 - mw, y: yy, width: mw, height: rowH - 2, fill: "#2b5a8a", opacity: .85}));
+    s.appendChild(el("rect", {x: cx + 30, y: yy, width: fw, height: rowH - 2, fill: "#b4552d", opacity: .85}));
+    if (rowH >= 14 || i % 5 === 0){
+      s.appendChild(el("text", {x: cx, y: yy + rowH - 4, "text-anchor": "middle",
+                                "font-size": 10, fill: "#6b6b6b"}, a));
+    }
+  });
+
+  var tot = 0, tm = 0, tf = 0;
+  ages.forEach(function(a){ tm += byAge[a].male; tf += byAge[a].female; });
+  tot = tm + tf;
+
+  var c = card("");
+  c.appendChild(s);
+  var p = document.createElement("p");
+  p.style.fontSize = ".85rem"; p.style.margin = "12px 0 0";
+  p.textContent = "合計 " + fmt(tot) + "人（男 " + fmt(tm) + " / 女 " + fmt(tf) + "）。"
+                + "年齢区分 " + ages.length + " 段階（" + (d.grain_label || "") + "）。";
+  c.appendChild(p);
+  box.appendChild(c);
+}
+
+/* ---------- ③ ランキング ---------- */
+function drawRank(d, box){
+  if (!d.rows.length){ box.appendChild(card("<p>比較できる町丁がありません。</p>")); return; }
+  var rows = d.rows;
+
+  /* 定義変更をまたいでいる場合、数字より先にこれを出す。
+     表は整った形で出てくるので、後ろに置くと読まれない。 */
+  (d.annotations || []).forEach(function(a){
+    var f = document.createElement("div");
+    f.className = "flag";
+    f.textContent = "この比較期間には " + a.reference_date.slice(0, 7) + " の"
+      + (a.kind === "series_break" ? "定義変更" : "欠測")
+      + "が挟まっています。" + a.reason;
+    box.appendChild(f);
+  });
+  if (d.safe_from){
+    var fix = document.createElement("div");
+    fix.className = "flag";
+    var b = document.createElement("button");
+    b.className = "go"; b.style.marginLeft = "8px"; b.style.padding = "4px 12px";
+    b.textContent = "開始を " + d.safe_from.slice(0, 7) + " に切り直す";
+    b.addEventListener("click", function(){
+      $("r-from").value = d.safe_from;
+      run("rank");
+    });
+    fix.appendChild(document.createTextNode("定義を揃えて比較するには、開始時点を定義変更後にしてください。"));
+    fix.appendChild(b);
+    box.appendChild(fix);
+  }
+  var top = rows.slice(0, 10), bot = rows.slice(-10).reverse();
+
+  function tbl(title, arr){
+    var h = "<h2 style='font-size:.95rem;margin:0 0 8px'>" + title + "</h2>"
+          + "<table><thead><tr><th>町丁</th><th>コード</th><th>開始</th><th>終了</th><th>増減</th><th>増減率</th></tr></thead><tbody>";
+    arr.forEach(function(r){
+      var cls = r.rate >= 0 ? "up" : "dn";
+      h += "<tr><td>" + r.area_name + "</td><td>" + r.key_code + "</td><td>" + fmt(r.v_from)
+         + "</td><td>" + fmt(r.v_to) + "</td><td class='" + cls + "'>"
+         + (r.diff >= 0 ? "+" : "") + fmt(r.diff) + "</td><td class='" + cls + "'>"
+         + (r.rate >= 0 ? "+" : "") + r.rate.toFixed(2) + "％</td></tr>";
+    });
+    return h + "</tbody></table>";
+  }
+  box.appendChild(card(tbl("増加率 上位10", top)));
+  box.appendChild(card(tbl("減少率 上位10", bot)));
+
+  var inc = rows.filter(function(r){ return r.diff > 0; }).length;
+  box.appendChild(card("<p style='font-size:.85rem;margin:0'>対象 " + rows.length
+    + " 町丁のうち、増加 " + inc + " / 減少 " + (rows.length - inc)
+    + "。町丁単位で見ると区全体の増減とは向きが揃わないことがあります。</p>"));
+}
+
+/* ---------- 要件5（事実）・要件6（示唆） ----------
+   二つを見た目で分ける。同じ枠に入れると、
+   計算結果と解釈が同じ確からしさに見えてしまう。 */
+function aiBox(cls, badge, title, note, bodyHtml){
+  var d = document.createElement("div");
+  d.className = "ai " + cls;
+  d.innerHTML = "<h4><span class='aibadge'>" + badge + "</span>" + title
+              + (note ? "<em>" + note + "</em>" : "") + "</h4>" + bodyHtml;
+  return d;
+}
+
+function loadInsight(box){
+  box.innerHTML = "<p class='busy'>要約を生成中…</p>";
+  var url = "/api/lab/insight?dataset=" + encodeURIComponent(DS)
+          + "&mode=" + $("s-mode").value
+          + ($("s-area").value ? "&key_code=" + $("s-area").value : "")
+          + "&month=" + $("s-month").value;
+
+  api(url).then(function(d){
+    box.innerHTML = "";
+    if (d.skipped) return;
+
+    if (d.rejected){
+      box.appendChild(aiBox("airej", "検証失敗", "要約を表示しません", "",
+        "<p>" + d.rejected.reason + "（" + d.rejected.numbers.join(", ") + "）"
+        + "。数値の検証に通らなかった文章は表示しない設計です。</p>"));
+      return;
+    }
+    if (d.error){
+      box.appendChild(aiBox("airej", "エラー", "要約を生成できませんでした", "",
+        "<p>" + d.error + "</p>"));
+      return;
+    }
+
+    if (d.fact){
+      var n5 = "上の計算結果のみから生成。数値は検証済み";
+      box.appendChild(aiBox("ai5", "事実", "集計結果の要約", n5,
+        "<p>" + d.fact.text.replace(/\\n/g, "<br>") + "</p>"));
+    }
+
+    if (d.insight){
+      var b = "<p>" + (d.insight.interpretation || "") + "</p>";
+      if (d.insight.limits){
+        b += "<div class='sub2'><b>このデータでは検証できないこと</b><br>"
+           + d.insight.limits + "</div>";
+      }
+      if (d.insight.falsification){
+        b += "<div class='sub2'><b>この解釈が誤りなら</b><br>"
+           + d.insight.falsification + "</div>";
+      }
+      box.appendChild(aiBox("ai6", "示唆", "AIによる解釈",
+        "事実ではありません。データ外の知識を含みます", b));
+    } else if (d.insightError){
+      box.appendChild(aiBox("airej", "エラー", "示唆を生成できませんでした", "",
+        "<p>" + d.insightError + "</p>"));
+    }
+
+    /* 何を渡して生成させたかを見せる。
+       SQLを出すのと同じ理屈で、プロンプトも検算可能にする。 */
+    var det = document.createElement("details");
+    var sm = document.createElement("summary");
+    sm.textContent = "AIに渡した内容と制約";
+    det.appendChild(sm);
+    var pre = document.createElement("pre");
+    pre.textContent = JSON.stringify(d.facts, null, 1)
+      + "\\n\\n-- 制約\\n" + (d.caveats || []).map(function(c){ return "- " + c; }).join("\\n")
+      + "\\n\\n-- モデル: " + (d.fact ? d.fact.model : "-")
+      + "\\n-- ログID: " + (d.fact ? d.fact.logId : "-")
+      + (d.fact && d.fact.cacheStatus ? " / cache " + d.fact.cacheStatus : "");
+    det.appendChild(pre);
+    box.appendChild(det);
+
+  }).catch(function(e){
+    box.innerHTML = "";
+    box.appendChild(aiBox("airej", "エラー", "要約を取得できませんでした", "",
+      "<p>" + e.message + "</p>"));
+  });
+}
+
+/* ---------- ④ 季節変動 ---------- */
+
+/* 0 を中心に左右へ伸びる棒。季節変動は向きが意味を持つので、
+   絶対値の棒にして順位だけ見せることはしない。 */
+function pctBar(v, max){
+  var W = 260, half = W / 2;
+  var w = max ? Math.min(Math.abs(v) / max, 1) * (half - 4) : 0;
+  var x = v < 0 ? half - w : half;
+  var col = v < 0 ? "var(--warn)" : "var(--acc)";
+  return '<svg class="bar" viewBox="0 0 ' + W + ' 14">'
+       + '<line x1="' + half + '" y1="0" x2="' + half + '" y2="14" stroke="#c9c4bb"/>'
+       + '<rect x="' + x + '" y="3" width="' + w + '" height="8" fill="' + col + '"/>'
+       + '</svg>';
+}
+
+/* 再現性の言い換え。ここまでは事実の範囲。
+   なぜそうなるのかは要件5・6側で扱う。 */
+function consistency(above, years){
+  if (!years) return "-";
+  var r = above / years;
+  var lab = (r >= 0.9 || r <= 0.1) ? "ほぼ毎年同じ向き"
+          : (r >= 0.75 || r <= 0.25) ? "多くの年で同じ向き"
+          : "年によって違う";
+  return above + "/" + years + "年 <span class='mut'>" + lab + "</span>";
+}
+
+function maxAbs(rows, k){
+  var m = 0;
+  rows.forEach(function(r){ m = Math.max(m, Math.abs(r[k])); });
+  return m;
+}
+
+function drawSeason(d, box){
+  if (!d.rows || !d.rows.length){
+    box.appendChild(card("<p>該当するデータがありません。</p>"));
+    return;
+  }
+  var h = "";
+
+  if (d.mode === "strength"){
+    var mx = maxAbs(d.rows, "amplitude_pct");
+    h += "<h3 class='sec'>季節変動の大きい町丁</h3>";
+    h += "<p class='mut' style='font-size:.8rem;margin:0 0 10px'>"
+       + "年間で最も高い月と最も低い月の差。町丁名を押すと 12ヶ月プロファイルに移ります。</p>";
+    h += "<table><thead><tr><th>町丁</th><th>振幅</th><th></th>"
+       + "<th>最高月</th><th>最低月</th></tr></thead><tbody>";
+    d.rows.forEach(function(r){
+      h += "<tr><td><button class='lnk' data-key='" + r.key_code + "'>" + r.area_name + "</button></td>"
+         + "<td class='num'>" + r.amplitude_pct.toFixed(2) + "%</td>"
+         + "<td><svg class='abar' viewBox='0 0 170 10'><rect x='0' y='2' width='"
+         + (mx ? r.amplitude_pct / mx * 170 : 0) + "' height='6' fill='var(--acc)'/></svg></td>"
+         + "<td class='num'>" + Number(r.peak_month) + "月 " + r.peak_pct.toFixed(1) + "%</td>"
+         + "<td class='num'>" + Number(r.trough_month) + "月 " + r.trough_pct.toFixed(1) + "%</td></tr>";
+    });
+    h += "</tbody></table>";
+
+  } else if (d.mode === "profile"){
+    var mp = maxAbs(d.rows, "pct_vs_trend");
+    h += "<h3 class='sec'>12ヶ月プロファイル</h3>";
+    h += "<p class='mut' style='font-size:.8rem;margin:0 0 10px'>"
+       + "各月の人口がトレンド比で何%高いか。</p>";
+    h += "<table><thead><tr><th>月</th><th>トレンド比</th><th></th>"
+       + "<th>上回った年</th></tr></thead><tbody>";
+    d.rows.forEach(function(r){
+      h += "<tr><td>" + Number(r.month) + "月</td>"
+         + "<td class='num'>" + r.pct_vs_trend.toFixed(2) + "%</td>"
+         + "<td>" + pctBar(r.pct_vs_trend, mp) + "</td>"
+         + "<td>" + consistency(r.n_above, r.n_years) + "</td></tr>";
+    });
+    h += "</tbody></table>";
+
+  } else {
+    var ma = maxAbs(d.rows, "pct_vs_trend");
+    h += "<h3 class='sec'>年齢階級別の内訳（" + Number(d.month) + "月）</h3>";
+    h += "<p class='mut' style='font-size:.8rem;margin:0 0 10px'>"
+       + "特定の階級だけが動いているなら、その年齢層に固有の要因が働いている可能性があります。"
+       + "全階級が同じ向きに動いている場合は、世帯単位の異動や集計上の要因を疑うべきです。</p>";
+    h += "<table><thead><tr><th>年齢</th><th>トレンド比</th><th></th>"
+       + "<th>上回った年</th></tr></thead><tbody>";
+    d.rows.forEach(function(r){
+      h += "<tr><td>" + r.age_class + "</td>"
+         + "<td class='num'>" + r.pct_vs_trend.toFixed(2) + "%</td>"
+         + "<td>" + pctBar(r.pct_vs_trend, ma) + "</td>"
+         + "<td>" + consistency(r.n_above, r.n_years) + "</td></tr>";
+    });
+    h += "</tbody></table>";
+  }
+
+  var c = card(h);
+
+  /* 一覧から入ってきたとき、戻る導線がないと行き止まりになる。 */
+  if (d.mode !== "strength"){
+    var bk = document.createElement("button");
+    bk.className = "mini";
+    bk.style.marginBottom = "10px";
+    bk.textContent = "← 振幅ランキングに戻る";
+    bk.addEventListener("click", function(){
+      $("s-mode").value = "strength";
+      syncSeason();
+      run("season");
+    });
+    c.insertBefore(bk, c.firstChild);
+  }
+
+  box.appendChild(c);
+
+  /* 要件5・6は別エンドポイント。表を先に出してから後で差し込む。 */
+  var ai = document.createElement("div");
+  box.appendChild(ai);
+  loadInsight(ai);
+
+  /* 振幅ランキングからプロファイルへの導線。
+     突出した町丁を見つけたあと、下の粒度へ降りられないと意味がない。 */
+  if (d.mode === "strength"){
+    c.querySelectorAll("button.lnk").forEach(function(b){
+      b.addEventListener("click", function(){
+        $("s-mode").value = "profile";
+        syncSeason();
+        $("s-area").value = b.dataset.key;
+        run("season");
+      });
+    });
+  }
+
+  /* 欠測は指数の分母に直接効くので、数字の後ろではなくここに出す。 */
+  (d.annotations || []).forEach(function(a){
+    var f = document.createElement("div");
+    f.className = "flag";
+    f.textContent = a.reference_date.slice(0, 7) + " は欠測です。"
+      + "この月の前後6ヶ月は移動平均の窓が埋まらず、集計から外れています。" + a.reason;
+    box.appendChild(f);
+  });
+
+  /* notes は「この集計の読み方」、issues は「データ自体の未解決事項」。
+     性質が違うので同じ枠に入れない。 */
+  if (d.issues && d.issues.length){
+    var ih = "<h3 class='sec'>このデータの既知の問題</h3><ul style='margin:0;padding-left:1.2em;font-size:.8rem'>";
+    d.issues.forEach(function(i){
+      ih += "<li><strong>" + i.title + "</strong><br><span class='mut'>" + i.detail + "</span></li>";
+    });
+    box.appendChild(card(ih + "</ul>"));
+  }
+}
+
+/* ---------- 実行 ---------- */
+function run(kind){
+  var out, url;
+  if (kind === "trend"){
+    out = $("t-out");
+    /* 区全体モードのときは、リストに選択が残っていても無視する。
+       画面の見た目と送るパラメータが食い違わないようにする。 */
+    var pick = document.querySelector("input[name=t-scope]:checked").value === "pick";
+    var sel = pick
+      ? [].slice.call($("t-area").selectedOptions).map(function(o){ return o.value; })
+      : [];
+    url = "/api/lab/trend?dataset=" + encodeURIComponent(DS)
+        + "&from=" + $("t-from").value + "&to=" + $("t-to").value
+        + (sel.length ? "&key_code=" + sel.join(",") : "")
+        + ($("t-view").value === "split" ? "&split=1" : "");
+  } else if (kind === "pyramid"){
+    out = $("y-out");
+    url = "/api/lab/pyramid?dataset=" + encodeURIComponent(DS)
+        + "&date=" + $("y-date").value
+        + ($("y-area").value ? "&key_code=" + $("y-area").value : "");
+  } else if (kind === "season"){
+    out = $("s-out");
+    url = "/api/lab/seasonality?dataset=" + encodeURIComponent(DS)
+        + "&mode=" + $("s-mode").value
+        + ($("s-area").value ? "&key_code=" + $("s-area").value : "")
+        + "&month=" + $("s-month").value;
+  } else {
+    out = $("r-out");
+    url = "/api/lab/ranking?dataset=" + encodeURIComponent(DS)
+        + "&from=" + $("r-from").value + "&to=" + $("r-to").value;
+  }
+  out.innerHTML = "<p class='busy'>集計中…</p>";
+  api(url).then(function(d){
+    out.innerHTML = "";
+    if (kind === "trend") drawTrend(d, out);
+    else if (kind === "pyramid") drawPyramid(d, out);
+    else if (kind === "season") drawSeason(d, out);
+    else drawRank(d, out);
+    meta(out, d);
+  }).catch(function(e){
+    out.innerHTML = "<div class='card'><p>取得に失敗しました：" + e.message + "</p></div>";
+  });
+}
+
+document.querySelectorAll(".tab").forEach(function(b){
+  b.addEventListener("click", function(){
+    document.querySelectorAll(".tab").forEach(function(x){ x.setAttribute("aria-selected", "false"); });
+    b.setAttribute("aria-selected", "true");
+    document.querySelectorAll(".panel").forEach(function(p){ p.classList.remove("on"); });
+    $("p-" + b.dataset.p).classList.add("on");
+  });
+});
+$("t-go").addEventListener("click", function(){ run("trend"); });
+
+/* 縦軸の選択はトレリスのときだけ意味を持つ。 */
+function syncView(){
+  $("t-scale").disabled = ($("t-view").value !== "split");
+}
+$("t-view").addEventListener("change", syncView);
+$("y-go").addEventListener("click", function(){ run("pyramid"); });
+$("r-go").addEventListener("click", function(){ run("rank"); });
+$("s-go").addEventListener("click", function(){ run("season"); });
+$("s-mode").addEventListener("change", syncSeason);
+
+/* モードで使わないコントロールは無効にする。
+   選べるのに効かない、という状態を作らない。 */
+function syncSeason(){
+  var m = $("s-mode").value;
+  $("s-area").disabled  = (m === "strength");
+  $("s-month").disabled = (m !== "age");
+}
+
+/* 区全体 / 町丁選択の切替。
+   区全体に戻したら選択も消す。「選んだまま無効」の状態を残さない。 */
+function syncScope(){
+  var pick = document.querySelector("input[name=t-scope]:checked").value === "pick";
+  $("t-area").disabled = !pick;
+  $("t-clear").disabled = !pick;
+  if (!pick) $("t-area").selectedIndex = -1;
+}
+document.querySelectorAll("input[name=t-scope]").forEach(function(r){
+  r.addEventListener("change", syncScope);
+});
+$("t-clear").addEventListener("click", function(){ $("t-area").selectedIndex = -1; });
+
+/* 町丁をクリックしたら自動で「町丁を選ぶ」に切り替える。
+   リストが無効なので通常は起きないが、キーボード操作の保険。 */
+$("t-area").addEventListener("change", function(){
+  if ($("t-area").selectedOptions.length){
+    document.querySelector("input[name=t-scope][value=pick]").checked = true;
+    syncScope();
+  }
+});
+
+api("/api/lab/meta?dataset=" + encodeURIComponent(DS)).then(function(m){
+  META = m;
+  $("ttl").textContent = m.dataset.muni_name + " " + m.dataset.title + " — 集計・可視化";
+  var ms = m.months;
+  if (!ms.length){ $("ttl").textContent += "（データがありません）"; return; }
+  var first = ms[0], last = ms[ms.length - 1];
+  var back = ms.length > 12 ? ms[ms.length - 13] : first;
+
+  fill($("t-from"), ms, null, null, first);
+  fill($("t-to"), ms, null, null, last);
+  fill($("y-date"), ms, null, null, last);
+  fill($("r-from"), ms, null, null, back);
+  fill($("r-to"), ms, null, null, last);
+
+  syncView();
+
+  var areaOpts = m.areas.slice();
+  fill($("t-area"), areaOpts, "key_code", "area_name", null);
+  $("t-area").selectedIndex = -1;   // 環境によって先頭が選択済みになるのを防ぐ
+  syncScope();
+  fill($("y-area"), [{key_code: "", area_name: "区全体"}].concat(areaOpts), "key_code", "area_name", "");
+  fill($("s-area"), areaOpts, "key_code", "area_name", null);
+  var mo = $("s-month");
+  mo.innerHTML = "";
+  for (var i = 1; i <= 12; i++){
+    var op = document.createElement("option");
+    op.value = ("0" + i).slice(-2);
+    op.textContent = i + "月";
+    mo.appendChild(op);
+  }
+  mo.value = "09";
+  syncSeason();
+
+
+  var a = m.dataset.attribution || "（出典表示が未設定です）";
+  $("attr").textContent = a + "　ライセンス：" + (m.dataset.license || "未確認");
+
+  run("trend");
+}).catch(function(e){
+  $("ttl").textContent = "読み込みに失敗しました：" + e.message;
+});
+</script></body></html>`;
+}
+
+/* =====================================================================
+ *  ルーティング
+ *    該当しなければ null を返す。index.js 側で素通りさせる。
+ * ===================================================================== */
+export async function handleLab(env, url) {
+  const p = url.pathname;
+  try {
+    if (p === "/lab") {
+      const key = url.searchParams.get("dataset") || "";
+      if (!/^[a-z0-9_]{1,64}$/.test(key)) {
+        return new Response("データセットを指定してください", { status: 400 });
+      }
+      return new Response(analyzePage(key), {
+        headers: { "Content-Type": "text/html; charset=utf-8" },
+      });
+    }
+    if (p === "/api/lab/meta") return apiMeta(env, url);
+    if (p === "/api/lab/trend") return apiTrend(env, url);
+    if (p === "/api/lab/pyramid") return apiPyramid(env, url);
+    if (p === "/api/lab/ranking") return apiRanking(env, url);
+    if (p === "/api/lab/seasonality") return apiSeasonality(env, url);
+    if (p === "/api/lab/insight") return apiInsight(env, url);
+  } catch (e) {
+    return json({ error: String(e.message || e) }, 500);
+  }
+  return null;
+}
