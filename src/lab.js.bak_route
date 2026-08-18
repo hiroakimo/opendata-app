@@ -1740,7 +1740,7 @@ api("/api/lab/meta?dataset=" + encodeURIComponent(DS)).then(function(m){
 export async function handleLab(env, url) {
   const p = url.pathname;
   try {
-    if (p === "/lab" || p === "/analyze") {
+    if (p === "/lab") {
       const key = url.searchParams.get("dataset") || "";
       if (!/^[a-z0-9_]{1,64}$/.test(key)) {
         return new Response("データセットを指定してください", { status: 400 });
