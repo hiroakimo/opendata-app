@@ -89,21 +89,6 @@ const MEASURES = {
     why: "世帯数は年齢・男女の内訳を持たず、1町丁1ヶ月あたり1行のみ（17,160行 = 88町丁 × 195ヶ月）",
   },
 };
-/* 季節指数は前計算テーブルから引く。指標ごとに別テーブルなので、
-   推移のように ds.view を差し替える形にはならない。
-   人口版のビューには触れない（公開版 /analyze が参照しているため）。
-   age は世帯数に存在しない。世帯数は年齢の内訳を持たない。 */
-const SEASON_VIEWS = {
-  population: {
-    profile: "v_nl_seasonality",
-    strength: "v_nl_seasonality_strength",
-    age: "v_nl_seasonality_age",
-  },
-  households: {
-    profile: "v_nl_seasonality_hh",
-    strength: "v_nl_seasonality_hh_strength",
-  },
-};
 /* 粒度 × 指標 → ビュー名。ユーザー入力から組み立てず、この表からのみ引く。
    1歳階級に世帯数は存在しない。意図的な空白なのでフォールバックさせない。 */
 const VIEW_BY_GRAIN_MEASURE = {
@@ -401,13 +386,7 @@ async function apiRanking(env, url) {
  * ------------------------------------------------------------------- */
 const isMonth = (s) => /^(0[1-9]|1[0-2])$/.test(s || "");
 
-async function seasonalityQuery(env, ds, mode, key, month, ms) {
-  ms = ms || { key: "population", label: "人口", unit: "人" };
-  const sv = SEASON_VIEWS[ms.key] || SEASON_VIEWS.population;
-  if (!sv[mode]) {
-    return { sql: "", params: [], rows: [],
-             notes: ["「" + ms.label + "」にこの表示は使えません"] };
-  }
+async function seasonalityQuery(env, ds, mode, key, month) {
   /* 指数の読み方はモードによらず同じなので毎回付ける。
      数字だけが独り歩きすると、10年平均であることも
      住民票ベースであることも落ちてしまう。 */
@@ -427,7 +406,7 @@ async function seasonalityQuery(env, ds, mode, key, month, ms) {
 ` +
       `       s.peak_month, s.peak_pct, s.trough_month, s.trough_pct
 ` +
-      `  FROM ${sv.strength} s
+      `  FROM v_nl_seasonality_strength s
 ` +
       `  JOIN areas a ON a.key_code = s.key_code
 ` +
@@ -442,7 +421,7 @@ async function seasonalityQuery(env, ds, mode, key, month, ms) {
     sql =
       `SELECT month, seasonal_index, pct_vs_trend, n_above, n_years
 ` +
-      `  FROM ${sv.profile}
+      `  FROM v_nl_seasonality
 ` +
       ` WHERE key_code = ?1
 ` +
@@ -452,7 +431,7 @@ async function seasonalityQuery(env, ds, mode, key, month, ms) {
     sql =
       `SELECT age_class, age_order, pct_vs_trend, n_above, n_years
 ` +
-      `  FROM ${sv.age}
+      `  FROM v_nl_seasonality_age
 ` +
       ` WHERE key_code = ?1 AND month = ?2
 ` +
@@ -475,12 +454,9 @@ async function seasonalityQuery(env, ds, mode, key, month, ms) {
 
 /* 集計本体と、それを Response にする層を分ける。
    要件5・6のエンドポイントが同じ集計を再利用するため。 */
-
 async function apiSeasonality(env, url) {
   const ds = await dataset(env, url.searchParams.get("dataset") || "");
   if (!ds) return bad("データセットが見つかりません");
-  const ms = resolveMeasure(ds, url.searchParams.get("measure"));
-  if (!ms) return bad("この粒度では指定された指標を扱えません");
 
   const mode = url.searchParams.get("mode") || "strength";
   const key = url.searchParams.get("key_code") || "";
@@ -488,7 +464,7 @@ async function apiSeasonality(env, url) {
   if (mode !== "strength" && !isKey(key)) return bad("町丁を指定してください");
   if (mode === "age" && !isMonth(month)) return bad("月の指定が不正です");
 
-  const q = await seasonalityQuery(env, ds, mode, key, month, ms);
+  const q = await seasonalityQuery(env, ds, mode, key, month);
   const { sql, params, rows, notes } = q;
 
   /* 断絶・欠測は特定の期間ではなく指数そのものに効くので、
@@ -829,12 +805,6 @@ h3.sec{font-size:.95rem;margin:0 0 4px}
 
 <section class="panel" id="p-season">
   <div class="ctl">
-    <div><label>指標</label>
-      <select id="s-measure">
-        <option value="population">人口（人）</option>
-        <option value="households">世帯数（世帯）</option>
-      </select>
-    </div>
     <div><label>表示</label>
       <select id="s-mode">
         <option value="strength">振幅ランキング（町丁）</option>
@@ -1346,13 +1316,6 @@ function aiBox(cls, badge, title, note, bodyHtml){
 
 function loadInsight(box){
   box.innerHTML = "<p class='busy'>要約を生成中…</p>";
-  /* AIインサイトは季節変動の結果を入力にしており、人口前提のまま。
-     世帯数を選んだ状態で呼ぶと、画面のグラフとAIの語る内容が食い違う。
-     measure を通すには要件5・6の2つのLLM呼び出しの対応が要る。→ 締切後 */
-  if ($("s-measure") && $("s-measure").value !== "population"){
-    box.innerHTML = "<p style='font-size:.85rem;color:#6b6b6b;margin:0'>AIインサイトは人口のみ対応しています。</p>";
-    return;
-  }
   var url = "/api/lab/insight?dataset=" + encodeURIComponent(DS)
           + "&mode=" + $("s-mode").value
           + ($("s-area").value ? "&key_code=" + $("s-area").value : "")
@@ -1583,7 +1546,6 @@ function run(kind){
     out = $("y-out");
     url = "/api/lab/pyramid?dataset=" + encodeURIComponent(DS)
         + "&date=" + $("y-date").value
-        + "&measure=" + $("s-measure").value;
         + ($("y-area").value ? "&key_code=" + $("y-area").value : "");
   } else if (kind === "season"){
     out = $("s-out");
@@ -1619,26 +1581,6 @@ document.querySelectorAll(".tab").forEach(function(b){
 });
 $("t-go").addEventListener("click", function(){ run("trend"); });
 
-function syncSeasonMeasure(){
-  var hh = $("s-measure").value === "households";
-  var sel = $("s-mode");
-  var opt = sel.querySelector('option[value="age"]');
-  if (opt){
-    opt.disabled = hh;
-    if (hh && sel.value === "age"){ sel.value = "strength"; }
-  }
-  var box = $("s-measure").parentNode;
-  var n = box.querySelector(".hint");
-  if (hh && !n){
-    var p = document.createElement("div");
-    p.className = "hint";
-    p.style.cssText = "font-size:11px;color:#6b6b6b;margin-top:4px;line-height:1.5";
-    p.textContent = "年齢の内訳とAIインサイトは人口のみ対応";
-    box.appendChild(p);
-  } else if (!hh && n){ n.remove(); }
-}
-$("s-measure").addEventListener("change", syncSeasonMeasure);
-syncSeasonMeasure();
 /* 縦軸の選択はトレリスのときだけ意味を持つ。 */
 function syncView(){
   $("t-scale").disabled = ($("t-view").value !== "split");
