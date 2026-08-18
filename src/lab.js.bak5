@@ -317,8 +317,6 @@ async function apiPyramid(env, url) {
 async function apiRanking(env, url) {
   const ds = await dataset(env, url.searchParams.get("dataset") || "");
   if (!ds) return bad("データセットが見つかりません");
-  const ms = resolveMeasure(ds, url.searchParams.get("measure"));
-  if (!ms) return bad("この粒度では指定された指標を扱えません");
 
   const from = url.searchParams.get("from");
   const to = url.searchParams.get("to");
@@ -330,7 +328,7 @@ async function apiRanking(env, url) {
     `       MAX(area_name) AS area_name,\n` +
     `       SUM(CASE WHEN reference_date = ?1 THEN value ELSE 0 END) AS v_from,\n` +
     `       SUM(CASE WHEN reference_date = ?2 THEN value ELSE 0 END) AS v_to\n` +
-    `  FROM ${ms.view}\n` +
+    `  FROM ${ds.view}\n` +
     ` WHERE reference_date IN (?1, ?2)\n` +
     ` GROUP BY key_code\n` +
     `HAVING v_from > 0 AND v_to > 0\n` +
@@ -346,8 +344,7 @@ async function apiRanking(env, url) {
   rows.sort((a, b) => b.rate - a.rate);
 
   const notes = [
-    `${ms.view} を参照（${ms.why}）`,
-    `指標は「${ms.label}」（単位：${ms.unit}）`,
+    ds.view + " を参照",
     "2時点の比較。間の月は見ていない",
     "どちらかの時点で0の町丁は除外（町名変更・区画整理で別行になった可能性があるため）",
     "町名の同一性は key_code で判定。表記が変わっても追える",
@@ -823,12 +820,6 @@ h3.sec{font-size:.95rem;margin:0 0 4px}
 
 <section class="panel" id="p-rank">
   <div class="ctl">
-    <div><label>指標</label>
-      <select id="r-measure">
-        <option value="population">人口（人）</option>
-        <option value="households">世帯数（世帯）</option>
-      </select>
-    </div>
     <div><label>比較開始</label><select id="r-from"></select></div>
     <div><label>比較終了</label><select id="r-to"></select></div>
     <button class="go" id="r-go">集計</button>
@@ -1603,8 +1594,7 @@ function run(kind){
   } else {
     out = $("r-out");
     url = "/api/lab/ranking?dataset=" + encodeURIComponent(DS)
-        + "&from=" + $("r-from").value + "&to=" + $("r-to").value
-        + "&measure=" + $("r-measure").value;
+        + "&from=" + $("r-from").value + "&to=" + $("r-to").value;
   }
   out.innerHTML = "<p class='busy'>集計中…</p>";
   api(url).then(function(d){
