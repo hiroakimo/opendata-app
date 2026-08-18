@@ -14,3 +14,20 @@ database_id = "2084d9c3-0ef6-45e8-a353-6b05434b2896"
 [[r2_buckets]]
 binding = "LAKE"
 bucket_name = "opendata-lake"
+
+[env.demo]
+name = "opendata-app-demo"
+
+[env.demo.vars]
+AIG_ACCOUNT_ID = "e0a6739e7b8a94e272b76b9dc94a8efd"
+AIG_GATEWAY_ID = "opendata-app"
+DEMO_MODE = "1"
+
+[[env.demo.d1_databases]]
+binding = "DB"
+database_name = "tokyo-population"
+database_id = "2084d9c3-0ef6-45e8-a353-6b05434b2896"
+
+[[env.demo.r2_buckets]]
+binding = "LAKE"
+bucket_name = "opendata-lake"

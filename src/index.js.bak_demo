@@ -135,7 +135,7 @@ export default {
     }
 
     /* --- 認証の壁 ------------------------------------------------- */
-    if (env.DEMO_MODE !== "1" && !(await isAuthed(request, env))) {
+    if (!(await isAuthed(request, env))) {
       if (url.pathname.startsWith("/api/")) return json({ error: "unauthorized" }, 401);
       return new Response(null, {
         status: 302,
