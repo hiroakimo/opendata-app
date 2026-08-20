@@ -573,12 +573,17 @@ async function catalogPage(env) {
 
   // known_issues はまだ無い環境もありうるので失敗を握りつぶす
   let issues = [];
+  let resolvedCount = 0;
   try {
     const r = await env.DB.prepare(
       `SELECT severity, title FROM known_issues WHERE resolved_at IS NULL
         ORDER BY CASE severity WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END`
     ).all();
     issues = r.results ?? [];
+    const rr = await env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM known_issues WHERE resolved_at IS NOT NULL`
+    ).first();
+    resolvedCount = rr?.n ?? 0;
   } catch { /* テーブル未作成 */ }
 
   const warnings = [];
@@ -613,7 +618,7 @@ ${issues.map((i) => `<tr>
   <td><span class="pill ${i.severity === "high" ? "bad" : "warn"}">${esc(i.severity)}</span></td>
   <td>${esc(i.title)}</td></tr>`).join("")}
 </tbody></table>
-<p class="mut">解決済みの課題は <code>known_issues.resolved_at</code> を埋めると消えます。</p>` : ""}
+<p class="mut">解決済みの課題は一覧から外れますが、記録は削除せず保持しています${resolvedCount ? `（現在 ${resolvedCount} 件）` : ""}。</p>` : ""}
 `));
 }
 
