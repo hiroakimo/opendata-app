@@ -220,7 +220,8 @@ async function loadCatalog(env) {
   const { results: files } = await env.DB.prepare(
     `SELECT ds.dataset_key, sf.sha256, sf.r2_key, sf.reference_date, sf.source_file,
             sf.content_bytes, sf.status, sf.row_count,
-            COALESCE(sf.distributable, 1) AS distributable, sf.hold_reason
+            COALESCE(sf.distributable, 1) AS distributable, sf.hold_reason,
+            COALESCE(sf.is_current, 1) AS is_current, sf.supersedes
        FROM source_files sf
        JOIN dataset_sources ds
          ON ds.dataset = sf.dataset AND ds.granularity = sf.granularity
@@ -633,7 +634,9 @@ async function datasetPage(env, key) {
               : m.state === "not_loaded" ? "ファイルはあるがDB未反映"
               : "欠測";
       const tip = `${ym} — ${t}${m.gap ? " / " + esc(m.gap.reason) : ""}`;
-      const dlable = (m.files ?? []).find((f) => f.distributable);
+      const files = m.files ?? [];
+      const dlable = files.find((f) => f.distributable && f.is_current !== 0)
+                  ?? files.find((f) => f.distributable);
       const inner = `<div class="cell ${m.state}" title="${tip}">${i + 1}</div>`;
       return dlable
         ? `<a href="/download/raw/${esc(dlable.sha256)}" class="celllink">${inner}</a>`
@@ -642,9 +645,14 @@ async function datasetPage(env, key) {
     return `<div class="yr"><b>${y}</b>${cells}</div>`;
   }).join("");
 
-  // 原本の一覧。同一月に複数版が並ぶ場合があるため、月ではなくファイル単位で出す
+  // 原本の一覧。同一月に複数版が並ぶ場合があるため、月ではなくファイル単位で出す。
+  // 既定では現行版だけを見せ、差し替えられた版は履歴として畳む。
+  // 消さないのは、差し替えが起きた事実そのものが利用者にとっての情報だから。
   const allFiles = d.months.flatMap((m) => (m.files ?? []).map((f) => ({ ...f, ym: m.ym })));
-  const fileRows = allFiles.map((f) => `<tr>
+  const currentFiles = allFiles.filter((f) => f.is_current !== 0);
+  const pastFiles    = allFiles.filter((f) => f.is_current === 0);
+
+  const rowOf = (f) => `<tr>
       <td>${esc(f.ym)}</td>
       <td>${esc(f.source_file ?? "—")}</td>
       <td class="num">${f.content_bytes ? (f.content_bytes / 1024).toFixed(0) + " KB" : "—"}</td>
@@ -653,7 +661,10 @@ async function datasetPage(env, key) {
       <td>${f.distributable
             ? `<a href="/download/raw/${esc(f.sha256)}">ダウンロード</a>`
             : `<span class="pill bad">配布停止</span><br><span class="mut">${esc(f.hold_reason ?? "")}</span>`}</td>
-    </tr>`).join("");
+    </tr>`;
+
+  const fileRows = currentFiles.map(rowOf).join("");
+  const pastRows = pastFiles.map(rowOf).join("");
 
   const anomalies = d.anomalies.length === 0
     ? '<p class="mut">ありません。</p>'
@@ -716,13 +727,24 @@ ${grid}
 <h2>原本のダウンロード</h2>
 <p class="mut">区が公開したファイルそのものです。加工していません。
    グリッドのマスからも直接落とせます。</p>
+
 <details>
-  <summary>ファイル一覧（${allFiles.length} 件）</summary>
+  <summary>ファイル一覧（${currentFiles.length} 件）</summary>
   <table>
     <thead><tr><th>年月</th><th>ファイル名</th><th>サイズ</th><th>行数</th><th>SHA256</th><th></th></tr></thead>
     <tbody>${fileRows || '<tr><td colspan="6">ファイルがありません</td></tr>'}</tbody>
   </table>
 </details>
+${pastFiles.length ? `
+<details>
+  <summary>差し替え・旧版（${pastFiles.length} 件）</summary>
+  <p class="mut">区による差し替え、または取得経路の違いにより現行版から外れたファイルです。
+     記録として残していますが、集計には使っていません。</p>
+  <table>
+    <thead><tr><th>年月</th><th>ファイル名</th><th>サイズ</th><th>行数</th><th>SHA256</th><th></th></tr></thead>
+    <tbody>${pastRows}</tbody>
+  </table>
+</details>` : ""}
 
 <h2>欠測・不整合</h2>
 ${anomalies}
