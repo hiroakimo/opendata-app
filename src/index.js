@@ -659,7 +659,8 @@ async function datasetPage(env, key) {
       <td class="num">${f.row_count?.toLocaleString() ?? "—"}</td>
       <td><code class="mut">${esc(f.sha256.slice(0, 12))}</code></td>
       <td>${f.distributable
-            ? `<a href="/download/raw/${esc(f.sha256)}">ダウンロード</a>`
+            ? `<a href="/download/raw/${esc(f.sha256)}">ダウンロード</a>${
+                f.hold_reason ? `<br><span class="mut">${esc(f.hold_reason)}</span>` : ""}`
             : `<span class="pill bad">配布停止</span><br><span class="mut">${esc(f.hold_reason ?? "")}</span>`}</td>
     </tr>`;
 
