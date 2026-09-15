@@ -10,703 +10,1055 @@
       "town": "芝一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 1,
+      "key_code": "13103001001",
+      "area_name": "芝1丁目"
     },
     {
       "town": "芝二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 1,
+      "key_code": "13103001002",
+      "area_name": "芝2丁目"
     },
     {
       "town": "芝三丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 1,
+      "key_code": "13103001003",
+      "area_name": "芝3丁目"
     },
     {
       "town": "芝四丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 1,
+      "key_code": "13103001004",
+      "area_name": "芝4丁目"
     },
     {
       "town": "芝五丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 1,
+      "key_code": "13103001005",
+      "area_name": "芝5丁目"
     },
     {
       "town": "海岸一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "海岸",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 2,
+      "key_code": "13103002001",
+      "area_name": "海岸1丁目"
     },
     {
       "town": "東新橋一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "東新橋",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 3,
+      "key_code": "13103003001",
+      "area_name": "東新橋1丁目"
     },
     {
       "town": "東新橋二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "東新橋",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 3,
+      "key_code": "13103003002",
+      "area_name": "東新橋2丁目"
     },
     {
       "town": "新橋一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "新橋",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 4,
+      "key_code": "13103004001",
+      "area_name": "新橋1丁目"
     },
     {
       "town": "新橋二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "新橋",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 4,
+      "key_code": "13103004002",
+      "area_name": "新橋2丁目"
     },
     {
       "town": "新橋三丁目",
       "district": "芝地区総合支所管内",
       "town_name": "新橋",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 4,
+      "key_code": "13103004003",
+      "area_name": "新橋3丁目"
     },
     {
       "town": "新橋四丁目",
       "district": "芝地区総合支所管内",
       "town_name": "新橋",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 4,
+      "key_code": "13103004004",
+      "area_name": "新橋4丁目"
     },
     {
       "town": "新橋五丁目",
       "district": "芝地区総合支所管内",
       "town_name": "新橋",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 4,
+      "key_code": "13103004005",
+      "area_name": "新橋5丁目"
     },
     {
       "town": "新橋六丁目",
       "district": "芝地区総合支所管内",
       "town_name": "新橋",
-      "chome": 6
+      "chome": 6,
+      "town_seq": 4,
+      "key_code": "13103004006",
+      "area_name": "新橋6丁目"
     },
     {
       "town": "西新橋一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "西新橋",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 5,
+      "key_code": "13103005001",
+      "area_name": "西新橋1丁目"
     },
     {
       "town": "西新橋二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "西新橋",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 5,
+      "key_code": "13103005002",
+      "area_name": "西新橋2丁目"
     },
     {
       "town": "西新橋三丁目",
       "district": "芝地区総合支所管内",
       "town_name": "西新橋",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 5,
+      "key_code": "13103005003",
+      "area_name": "西新橋3丁目"
     },
     {
       "town": "三田一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "三田",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 6,
+      "key_code": "13103006001",
+      "area_name": "三田1丁目"
     },
     {
       "town": "三田二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "三田",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 6,
+      "key_code": "13103006002",
+      "area_name": "三田2丁目"
     },
     {
       "town": "三田三丁目",
       "district": "芝地区総合支所管内",
       "town_name": "三田",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 6,
+      "key_code": "13103006003",
+      "area_name": "三田3丁目"
     },
     {
       "town": "浜松町一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "浜松町",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 7,
+      "key_code": "13103007001",
+      "area_name": "浜松町1丁目"
     },
     {
       "town": "浜松町二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "浜松町",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 7,
+      "key_code": "13103007002",
+      "area_name": "浜松町2丁目"
     },
     {
       "town": "芝大門一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝大門",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 8,
+      "key_code": "13103008001",
+      "area_name": "芝大門1丁目"
     },
     {
       "town": "芝大門二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝大門",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 8,
+      "key_code": "13103008002",
+      "area_name": "芝大門2丁目"
     },
     {
       "town": "芝公園一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝公園",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 9,
+      "key_code": "13103009001",
+      "area_name": "芝公園1丁目"
     },
     {
       "town": "芝公園二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝公園",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 9,
+      "key_code": "13103009002",
+      "area_name": "芝公園2丁目"
     },
     {
       "town": "芝公園三丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝公園",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 9,
+      "key_code": "13103009003",
+      "area_name": "芝公園3丁目"
     },
     {
       "town": "芝公園四丁目",
       "district": "芝地区総合支所管内",
       "town_name": "芝公園",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 9,
+      "key_code": "13103009004",
+      "area_name": "芝公園4丁目"
     },
     {
       "town": "虎ノ門一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "虎ノ門",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 10,
+      "key_code": "13103010001",
+      "area_name": "虎ノ門1丁目"
     },
     {
       "town": "虎ノ門二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "虎ノ門",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 10,
+      "key_code": "13103010002",
+      "area_name": "虎ノ門2丁目"
     },
     {
       "town": "虎ノ門三丁目",
       "district": "芝地区総合支所管内",
       "town_name": "虎ノ門",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 10,
+      "key_code": "13103010003",
+      "area_name": "虎ノ門3丁目"
     },
     {
       "town": "虎ノ門四丁目",
       "district": "芝地区総合支所管内",
       "town_name": "虎ノ門",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 10,
+      "key_code": "13103010004",
+      "area_name": "虎ノ門4丁目"
     },
     {
       "town": "虎ノ門五丁目",
       "district": "芝地区総合支所管内",
       "town_name": "虎ノ門",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 10,
+      "key_code": "13103010005",
+      "area_name": "虎ノ門5丁目"
     },
     {
       "town": "愛宕一丁目",
       "district": "芝地区総合支所管内",
       "town_name": "愛宕",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 11,
+      "key_code": "13103011001",
+      "area_name": "愛宕1丁目"
     },
     {
       "town": "愛宕二丁目",
       "district": "芝地区総合支所管内",
       "town_name": "愛宕",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 11,
+      "key_code": "13103011002",
+      "area_name": "愛宕2丁目"
     },
     {
       "town": "麻布狸穴町",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布狸穴町",
-      "chome": null
+      "chome": null,
+      "town_seq": 12,
+      "key_code": "13103012000",
+      "area_name": "麻布狸穴町"
     },
     {
       "town": "麻布永坂町",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布永坂町",
-      "chome": null
+      "chome": null,
+      "town_seq": 13,
+      "key_code": "13103013000",
+      "area_name": "麻布永坂町"
     },
     {
       "town": "南麻布一丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "南麻布",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 14,
+      "key_code": "13103014001",
+      "area_name": "南麻布1丁目"
     },
     {
       "town": "南麻布二丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "南麻布",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 14,
+      "key_code": "13103014002",
+      "area_name": "南麻布2丁目"
     },
     {
       "town": "南麻布三丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "南麻布",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 14,
+      "key_code": "13103014003",
+      "area_name": "南麻布3丁目"
     },
     {
       "town": "南麻布四丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "南麻布",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 14,
+      "key_code": "13103014004",
+      "area_name": "南麻布4丁目"
     },
     {
       "town": "南麻布五丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "南麻布",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 14,
+      "key_code": "13103014005",
+      "area_name": "南麻布5丁目"
     },
     {
       "town": "元麻布一丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "元麻布",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 15,
+      "key_code": "13103015001",
+      "area_name": "元麻布1丁目"
     },
     {
       "town": "元麻布二丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "元麻布",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 15,
+      "key_code": "13103015002",
+      "area_name": "元麻布2丁目"
     },
     {
       "town": "元麻布三丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "元麻布",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 15,
+      "key_code": "13103015003",
+      "area_name": "元麻布3丁目"
     },
     {
       "town": "西麻布一丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "西麻布",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 16,
+      "key_code": "13103016001",
+      "area_name": "西麻布1丁目"
     },
     {
       "town": "西麻布二丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "西麻布",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 16,
+      "key_code": "13103016002",
+      "area_name": "西麻布2丁目"
     },
     {
       "town": "西麻布三丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "西麻布",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 16,
+      "key_code": "13103016003",
+      "area_name": "西麻布3丁目"
     },
     {
       "town": "西麻布四丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "西麻布",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 16,
+      "key_code": "13103016004",
+      "area_name": "西麻布4丁目"
     },
     {
       "town": "六本木一丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "六本木",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 17,
+      "key_code": "13103017001",
+      "area_name": "六本木1丁目"
     },
     {
       "town": "六本木二丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "六本木",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 17,
+      "key_code": "13103017002",
+      "area_name": "六本木2丁目"
     },
     {
       "town": "六本木三丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "六本木",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 17,
+      "key_code": "13103017003",
+      "area_name": "六本木3丁目"
     },
     {
       "town": "六本木四丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "六本木",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 17,
+      "key_code": "13103017004",
+      "area_name": "六本木4丁目"
     },
     {
       "town": "六本木五丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "六本木",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 17,
+      "key_code": "13103017005",
+      "area_name": "六本木5丁目"
     },
     {
       "town": "六本木六丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "六本木",
-      "chome": 6
+      "chome": 6,
+      "town_seq": 17,
+      "key_code": "13103017006",
+      "area_name": "六本木6丁目"
     },
     {
       "town": "六本木七丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "六本木",
-      "chome": 7
+      "chome": 7,
+      "town_seq": 17,
+      "key_code": "13103017007",
+      "area_name": "六本木7丁目"
     },
     {
       "town": "麻布台一丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布台",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 18,
+      "key_code": "13103018001",
+      "area_name": "麻布台1丁目"
     },
     {
       "town": "麻布台二丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布台",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 18,
+      "key_code": "13103018002",
+      "area_name": "麻布台2丁目"
     },
     {
       "town": "麻布台三丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布台",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 18,
+      "key_code": "13103018003",
+      "area_name": "麻布台3丁目"
     },
     {
       "town": "麻布十番一丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布十番",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 19,
+      "key_code": "13103019001",
+      "area_name": "麻布十番1丁目"
     },
     {
       "town": "麻布十番二丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布十番",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 19,
+      "key_code": "13103019002",
+      "area_name": "麻布十番2丁目"
     },
     {
       "town": "麻布十番三丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布十番",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 19,
+      "key_code": "13103019003",
+      "area_name": "麻布十番3丁目"
     },
     {
       "town": "麻布十番四丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "麻布十番",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 19,
+      "key_code": "13103019004",
+      "area_name": "麻布十番4丁目"
     },
     {
       "town": "東麻布一丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "東麻布",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 20,
+      "key_code": "13103020001",
+      "area_name": "東麻布1丁目"
     },
     {
       "town": "東麻布二丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "東麻布",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 20,
+      "key_code": "13103020002",
+      "area_name": "東麻布2丁目"
     },
     {
       "town": "東麻布三丁目",
       "district": "麻布地区総合支所管内",
       "town_name": "東麻布",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 20,
+      "key_code": "13103020003",
+      "area_name": "東麻布3丁目"
     },
     {
       "town": "元赤坂一丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "元赤坂",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 21,
+      "key_code": "13103021001",
+      "area_name": "元赤坂1丁目"
     },
     {
       "town": "元赤坂二丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "元赤坂",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 21,
+      "key_code": "13103021002",
+      "area_name": "元赤坂2丁目"
     },
     {
       "town": "赤坂一丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 22,
+      "key_code": "13103022001",
+      "area_name": "赤坂1丁目"
     },
     {
       "town": "赤坂二丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 22,
+      "key_code": "13103022002",
+      "area_name": "赤坂2丁目"
     },
     {
       "town": "赤坂三丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 22,
+      "key_code": "13103022003",
+      "area_name": "赤坂3丁目"
     },
     {
       "town": "赤坂四丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 22,
+      "key_code": "13103022004",
+      "area_name": "赤坂4丁目"
     },
     {
       "town": "赤坂五丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 22,
+      "key_code": "13103022005",
+      "area_name": "赤坂5丁目"
     },
     {
       "town": "赤坂六丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 6
+      "chome": 6,
+      "town_seq": 22,
+      "key_code": "13103022006",
+      "area_name": "赤坂6丁目"
     },
     {
       "town": "赤坂七丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 7
+      "chome": 7,
+      "town_seq": 22,
+      "key_code": "13103022007",
+      "area_name": "赤坂7丁目"
     },
     {
       "town": "赤坂八丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 8
+      "chome": 8,
+      "town_seq": 22,
+      "key_code": "13103022008",
+      "area_name": "赤坂8丁目"
     },
     {
       "town": "赤坂九丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "赤坂",
-      "chome": 9
+      "chome": 9,
+      "town_seq": 22,
+      "key_code": "13103022009",
+      "area_name": "赤坂9丁目"
     },
     {
       "town": "南青山一丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "南青山",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 23,
+      "key_code": "13103023001",
+      "area_name": "南青山1丁目"
     },
     {
       "town": "南青山二丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "南青山",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 23,
+      "key_code": "13103023002",
+      "area_name": "南青山2丁目"
     },
     {
       "town": "南青山三丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "南青山",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 23,
+      "key_code": "13103023003",
+      "area_name": "南青山3丁目"
     },
     {
       "town": "南青山四丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "南青山",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 23,
+      "key_code": "13103023004",
+      "area_name": "南青山4丁目"
     },
     {
       "town": "南青山五丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "南青山",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 23,
+      "key_code": "13103023005",
+      "area_name": "南青山5丁目"
     },
     {
       "town": "南青山六丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "南青山",
-      "chome": 6
+      "chome": 6,
+      "town_seq": 23,
+      "key_code": "13103023006",
+      "area_name": "南青山6丁目"
     },
     {
       "town": "南青山七丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "南青山",
-      "chome": 7
+      "chome": 7,
+      "town_seq": 23,
+      "key_code": "13103023007",
+      "area_name": "南青山7丁目"
     },
     {
       "town": "北青山一丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "北青山",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 24,
+      "key_code": "13103024001",
+      "area_name": "北青山1丁目"
     },
     {
       "town": "北青山二丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "北青山",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 24,
+      "key_code": "13103024002",
+      "area_name": "北青山2丁目"
     },
     {
       "town": "北青山三丁目",
       "district": "赤坂地区総合支所管内",
       "town_name": "北青山",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 24,
+      "key_code": "13103024003",
+      "area_name": "北青山3丁目"
     },
     {
       "town": "三田四丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "三田",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 6,
+      "key_code": "13103006004",
+      "area_name": "三田4丁目"
     },
     {
       "town": "三田五丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "三田",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 6,
+      "key_code": "13103006005",
+      "area_name": "三田5丁目"
     },
     {
       "town": "高輪一丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "高輪",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 25,
+      "key_code": "13103025001",
+      "area_name": "高輪1丁目"
     },
     {
       "town": "高輪二丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "高輪",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 25,
+      "key_code": "13103025002",
+      "area_name": "高輪2丁目"
     },
     {
       "town": "高輪三丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "高輪",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 25,
+      "key_code": "13103025003",
+      "area_name": "高輪3丁目"
     },
     {
       "town": "高輪四丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "高輪",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 25,
+      "key_code": "13103025004",
+      "area_name": "高輪4丁目"
     },
     {
       "town": "白金一丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 26,
+      "key_code": "13103026001",
+      "area_name": "白金1丁目"
     },
     {
       "town": "白金二丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 26,
+      "key_code": "13103026002",
+      "area_name": "白金2丁目"
     },
     {
       "town": "白金三丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 26,
+      "key_code": "13103026003",
+      "area_name": "白金3丁目"
     },
     {
       "town": "白金四丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 26,
+      "key_code": "13103026004",
+      "area_name": "白金4丁目"
     },
     {
       "town": "白金五丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 26,
+      "key_code": "13103026005",
+      "area_name": "白金5丁目"
     },
     {
       "town": "白金六丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金",
-      "chome": 6
+      "chome": 6,
+      "town_seq": 26,
+      "key_code": "13103026006",
+      "area_name": "白金6丁目"
     },
     {
       "town": "白金台一丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金台",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 27,
+      "key_code": "13103027001",
+      "area_name": "白金台1丁目"
     },
     {
       "town": "白金台二丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金台",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 27,
+      "key_code": "13103027002",
+      "area_name": "白金台2丁目"
     },
     {
       "town": "白金台三丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金台",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 27,
+      "key_code": "13103027003",
+      "area_name": "白金台3丁目"
     },
     {
       "town": "白金台四丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金台",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 27,
+      "key_code": "13103027004",
+      "area_name": "白金台4丁目"
     },
     {
       "town": "白金台五丁目",
       "district": "高輪地区総合支所管内",
       "town_name": "白金台",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 27,
+      "key_code": "13103027005",
+      "area_name": "白金台5丁目"
     },
     {
       "town": "芝浦一丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "芝浦",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 28,
+      "key_code": "13103028001",
+      "area_name": "芝浦1丁目"
     },
     {
       "town": "芝浦二丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "芝浦",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 28,
+      "key_code": "13103028002",
+      "area_name": "芝浦2丁目"
     },
     {
       "town": "芝浦三丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "芝浦",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 28,
+      "key_code": "13103028003",
+      "area_name": "芝浦3丁目"
     },
     {
       "town": "芝浦四丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "芝浦",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 28,
+      "key_code": "13103028004",
+      "area_name": "芝浦4丁目"
     },
     {
       "town": "海岸二丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "海岸",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 2,
+      "key_code": "13103002002",
+      "area_name": "海岸2丁目"
     },
     {
       "town": "海岸三丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "海岸",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 2,
+      "key_code": "13103002003",
+      "area_name": "海岸3丁目"
     },
     {
       "town": "港南一丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "港南",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 29,
+      "key_code": "13103029001",
+      "area_name": "港南1丁目"
     },
     {
       "town": "港南二丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "港南",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 29,
+      "key_code": "13103029002",
+      "area_name": "港南2丁目"
     },
     {
       "town": "港南三丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "港南",
-      "chome": 3
+      "chome": 3,
+      "town_seq": 29,
+      "key_code": "13103029003",
+      "area_name": "港南3丁目"
     },
     {
       "town": "港南四丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "港南",
-      "chome": 4
+      "chome": 4,
+      "town_seq": 29,
+      "key_code": "13103029004",
+      "area_name": "港南4丁目"
     },
     {
       "town": "港南五丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "港南",
-      "chome": 5
+      "chome": 5,
+      "town_seq": 29,
+      "key_code": "13103029005",
+      "area_name": "港南5丁目"
     },
     {
       "town": "台場一丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "台場",
-      "chome": 1
+      "chome": 1,
+      "town_seq": 30,
+      "key_code": "13103030001",
+      "area_name": "台場1丁目"
     },
     {
       "town": "台場二丁目",
       "district": "芝浦港南地区総合支所管内",
       "town_name": "台場",
-      "chome": 2
+      "chome": 2,
+      "town_seq": 30,
+      "key_code": "13103030002",
+      "area_name": "台場2丁目"
     }
-  ]
+  ],
+  "key_rule": "13103 + 町の連番3桁（マスタ初出順）+ 丁目3桁（丁目なしは000）。一度振った番号は変えない。新しい町丁目は末尾に追加する。"
 }
