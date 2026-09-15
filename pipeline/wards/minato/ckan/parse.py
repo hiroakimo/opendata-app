@@ -2,10 +2,10 @@
 """
 港区CKAN「町丁目別人口・世帯数（住民基本台帳に基づく）」パーサー
 
-入力 : minato_survey.py が保存した package / manifest / raw/{sha256}
-設定 : minato_towns.json      … 町丁目マスタ（--init-master で一度だけ生成し、確認してコミット）
-       minato_exceptions.json … 既知の不整合（表記ゆれ・行単位の例外）
-出力 : work/minato_parsed/ 以下（検証をすべて通過した場合のみ書き込む）
+入力 : survey.py が保存した package / manifest / raw/{sha256}
+設定 : towns.json      … 町丁目マスタ（--init-master で一度だけ生成し、確認してコミット）
+       exceptions.json … 既知の不整合（表記ゆれ・行単位の例外）
+出力 : work/minato/ckan/parsed/ 以下（検証をすべて通過した場合のみ書き込む）
        observations.csv  … 縦持ち。世帯数・男・女・合計（原本値）・不明（導出）
        anomalies.csv     … 適用した例外・表記ゆれの記録
        files.csv         … リソースごとの取込結果
@@ -22,8 +22,8 @@
   ※ 区合計の行は原本にないため、区総数の検算は monthly_totals.csv で別系列と照合する
 
 使い方
-  python parse_minato_ckan.py --init-master   # マスタ生成（初回のみ）
-  python parse_minato_ckan.py                 # 検証＋出力
+  python pipeline/wards/minato/ckan/parse.py --init-master   # マスタ生成（初回のみ）
+  python pipeline/wards/minato/ckan/parse.py                 # 検証＋出力
 """
 import argparse
 import csv
@@ -37,8 +37,8 @@ from pathlib import Path
 
 MUNI_CODE = "131032"
 HERE = Path(__file__).resolve().parent
-SURVEY = Path("work/minato_survey")
-OUT = Path("work/minato_parsed")
+SURVEY = Path("work/minato/ckan/survey")
+OUT = Path("work/minato/ckan/parsed")
 
 EXPECTED_HEADER = ["年月日［西暦］", "地区", "町丁目", "世帯数",
                    "人口男［人］", "人口女［人］", "人口合計［人］"]
@@ -215,8 +215,8 @@ def init_master(items, aliases, path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--init-master", action="store_true")
-    ap.add_argument("--master", type=Path, default=HERE / "minato_towns.json")
-    ap.add_argument("--exceptions", type=Path, default=HERE / "minato_exceptions.json")
+    ap.add_argument("--master", type=Path, default=HERE.parent / "towns.json")
+    ap.add_argument("--exceptions", type=Path, default=HERE.parent / "exceptions.json")
     args = ap.parse_args()
 
     pkg, items = load_inputs()
@@ -354,7 +354,7 @@ def main():
         W(f"表記ゆれ {aid} は今回一度も出現しなかった")
 
     if errors:
-        rep = Path("work/minato_parse_errors.md")
+        rep = Path("work/minato/ckan/parse_errors.md")
         rep.parent.mkdir(parents=True, exist_ok=True)
         rep.write_text("# 検証エラー（出力は書き込んでいません）\n\n" +
                        "\n".join(f"- {e}" for e in errors) + "\n\n## 警告\n\n" +

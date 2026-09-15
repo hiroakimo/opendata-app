@@ -10,4 +10,4 @@ dist/
 
 work/
 __pycache__/
-*.bak
+*.bak*

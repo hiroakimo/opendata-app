@@ -1,0 +1,61 @@
+{
+  "_comment": "取り込み対象の一覧。区を足すときはここに追記してから pipeline/wards/{ward}/ を作る。",
+  "wards": {
+    "meguro": {
+      "muni_code": "131105",
+      "name": "目黒区",
+      "key_prefix": "13110",
+      "series": {
+        "bodik": {
+          "dataset_keys": [
+            "meguro_5y",
+            "meguro_1y"
+          ],
+          "source": "BODIK (data.bodik.jp)",
+          "code": "pipeline/wards/meguro/bodik",
+          "work": "work/meguro/bodik",
+          "d1": [
+            "observations_5y",
+            "observations_1y"
+          ],
+          "status": "公開中（デモ）"
+        }
+      }
+    },
+    "minato": {
+      "muni_code": "131032",
+      "name": "港区",
+      "key_prefix": "13103",
+      "series": {
+        "ckan": {
+          "dataset_keys": [
+            "minato_noage"
+          ],
+          "source": "港区オープンデータカタログ（jinko-chochomokubetsu）",
+          "code": "pipeline/wards/minato/ckan",
+          "work": "work/minato/ckan",
+          "d1": [
+            "observations_noage"
+          ],
+          "status": "取込済み・非公開"
+        },
+        "web5y": {
+          "dataset_keys": [
+            "minato_5y"
+          ],
+          "source": "港区ホームページ（町丁別年齢5歳階級別人口表）",
+          "code": "pipeline/wards/minato/web5y",
+          "work": "work/minato/web5y",
+          "d1": [
+            "observations_age5"
+          ],
+          "status": "パーサー作成中"
+        }
+      }
+    }
+  },
+  "watch": {
+    "code": "pipeline/watch",
+    "work": "work/watch"
+  }
+}

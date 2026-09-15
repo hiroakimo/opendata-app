@@ -5,15 +5,15 @@
 
 - 読み取り専用。D1 / R2 には書き込まない。
 - package_show の応答をそのまま保存する（raw_json）。
-- 取得したファイルは work/minato_survey/raw/{sha256} に保存し、2回目以降は再利用する。
+- 取得したファイルは work/minato/ckan/survey/raw/{sha256} に保存し、2回目以降は再利用する。
 - --offline で前回取得分だけを使って再集計する（通信なし）。
 
 使い方:
-  python minato_survey.py            # 取得＋集計
-  python minato_survey.py --offline  # 保存済みファイルで再集計
+  python pipeline/wards/minato/ckan/survey.py            # 取得＋集計
+  python pipeline/wards/minato/ckan/survey.py --offline  # 保存済みファイルで再集計
 出力:
-  work/minato_survey/report.md       # 人が読む調査結果
-  work/minato_survey/resources.csv   # リソース単位の一覧
+  work/minato/ckan/survey/report.md       # 人が読む調査結果
+  work/minato/ckan/survey/resources.csv   # リソース単位の一覧
 """
 import argparse
 import csv
@@ -31,7 +31,7 @@ from pathlib import Path
 PACKAGE_URL = ("https://opendata.city.minato.tokyo.jp/api/3/action/"
                "package_show?id=jinko-chochomokubetsu")
 UA = "machinome-survey/0.1 (+https://github.com/hiroakimo/opendata-app)"
-OUT = Path("work/minato_survey")
+OUT = Path("work/minato/ckan/survey")
 RAW = OUT / "raw"
 MANIFEST = OUT / "manifest.json"
 WAIT_SEC = 2.0  # 公開サーバーへの負荷を避けるため、1件ずつ間隔をあけて取得

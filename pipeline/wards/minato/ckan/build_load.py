@@ -5,14 +5,14 @@
 
 前提
   - migrations/0005_noage_observations.sql 適用済み
-  - parse_minato_ckan.py が成功し work/minato_parsed/ がある
-  - minato_towns.json に key_code が振られている（--assign-keys で一度だけ）
+  - parse.py が成功し work/minato/ckan/parsed/ がある
+  - towns.json に key_code が振られている（--assign-keys で一度だけ）
 
 使い方
-  python build_minato_load.py --assign-keys   # 初回のみ。key_code を固定してコミット
-  python build_minato_load.py                 # work/minato_load/ を生成
+  python pipeline/wards/minato/ckan/build_load.py --assign-keys   # 初回のみ。key_code を固定してコミット
+  python pipeline/wards/minato/ckan/build_load.py                 # work/minato/ckan/load/ を生成
 
-生成物（work/minato_load/）
+生成物（work/minato/ckan/load/）
   r2_upload.ps1   原本を R2 raw/{sha256} に置く
   00_meta.sql     datasets / dataset_sources / areas / area_aliases /
                   source_files / source_file_periods / data_anomalies
@@ -29,10 +29,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-MASTER = HERE / "minato_towns.json"
-SURVEY = Path("work/minato_survey")
-PARSED = Path("work/minato_parsed")
-OUT = Path("work/minato_load")
+MASTER = HERE.parent / "towns.json"
+SURVEY = Path("work/minato/ckan/survey")
+PARSED = Path("work/minato/ckan/parsed")
+OUT = Path("work/minato/ckan/load")
 
 DB = "tokyo-population"
 BUCKET = "opendata-lake"
@@ -151,7 +151,7 @@ def build():
     dates = sorted(per_month)
 
     # ---- 00_meta.sql
-    S = ["-- 生成: build_minato_load.py " + now, "-- 港区CKAN（jinko-chochomokubetsu）メタデータ", ""]
+    S = ["-- 生成: build_load.py " + now, "-- 港区CKAN（jinko-chochomokubetsu）メタデータ", ""]
     S.append(
         "INSERT OR REPLACE INTO datasets (dataset_key, muni_code, muni_name, domain, title, granularity,"
         " grain_label, source_site, source_url, license, attribution, is_public, notes, license_url) VALUES ("
