@@ -71,3 +71,12 @@ JOIN datasets d
 GROUP BY 1, 2
 ON CONFLICT(dataset_key, reference_date)
 DO UPDATE SET obs_rows = excluded.obs_rows;
+
+-- (5) 観測側 5歳階級（区横断）
+INSERT INTO dataset_periods (dataset_key, reference_date, file_count, obs_rows)
+SELECT o.dataset_key, o.reference_date, 0, COUNT(*)
+FROM observations_age5 o
+JOIN datasets d ON d.dataset_key = o.dataset_key
+GROUP BY 1, 2
+ON CONFLICT(dataset_key, reference_date)
+DO UPDATE SET obs_rows = excluded.obs_rows;

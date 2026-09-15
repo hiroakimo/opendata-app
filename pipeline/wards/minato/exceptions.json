@@ -5,7 +5,9 @@
       "id": "minato-alias-2005-08-roppongi5",
       "alias": "六本木5目",
       "canonical": "六本木五丁目",
-      "dates": ["2005-08-01"],
+      "dates": [
+        "2005-08-01"
+      ],
       "note": "2005年8月分のみ町丁目名が「六本木5目」と記載されている。前後月は「六本木五丁目」。"
     }
   ],
@@ -15,9 +17,54 @@
       "reference_date": "2008-01-01",
       "town": "愛宕二丁目",
       "kind": "sum_mismatch",
-      "reported": {"male": 100, "female": 107, "total": 2},
+      "reported": {
+        "male": 100,
+        "female": 107,
+        "total": 2
+      },
       "treatment": "keep_reported_flag",
       "note": "人口合計(2)が男+女(207)を下回る。原本の値のまま保持し、異常フラグを付け、性別不明の導出から除外する。"
     }
-  ]
+  ],
+  "web5y": {
+    "cell_exceptions": [
+      {
+        "id": "minato-5y-2025-04-akasaka1-foreign-50-54",
+        "reference_date": "2025-04-01",
+        "area_name": "赤坂1丁目",
+        "nationality": "foreign",
+        "age_class": "50-54",
+        "kind": "blank_cell",
+        "reported": {
+          "total": 9,
+          "male": 7,
+          "female": null
+        },
+        "treatment": "keep_reported_flag",
+        "note": "外国人50〜54歳の女のセルが空欄。値は補わずNULLのまま保持し、性別不明の導出から除外する。本来の値はCKAN系列と小計の双方から引いた値が一致した場合のみ推定値として記録する。"
+      }
+    ],
+    "subtotal_exceptions": [
+      {
+        "id": "minato-5y-2026-01-akasaka7-foreign-sub15-64",
+        "reference_date": "2026-01-01",
+        "area_name": "赤坂7丁目",
+        "nationality": "foreign",
+        "subtotal": "15-64",
+        "kind": "subtotal_mismatch",
+        "reported": {
+          "total": 204,
+          "male": 105,
+          "female": 99
+        },
+        "computed": {
+          "total": 205,
+          "male": 105,
+          "female": 99
+        },
+        "treatment": "validation_only",
+        "note": "小計（15〜64歳）の総数が男+女（204）で計算されており、各年齢の総数の合計（205、性別不明1人を含む）と一致しない。小計行は保存しないため検証のみ。"
+      }
+    ]
+  }
 }
