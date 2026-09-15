@@ -10,6 +10,7 @@
 
 import { handleAnalysis } from "./analysis.js";   // 20260814 追加
 import { handleLab } from "./lab.js";           // 20260816 追加（開発版）
+import { handleMinato } from "./minato.js";     // 20260915 追加（港区・認証環境のみ）
 
 const COOKIE = "__Host-session";
 const TTL = 60 * 60 * 12; // 12時間
@@ -166,6 +167,12 @@ async function router(request, url, env) {
   if (dl) return downloadRaw(env, dl[1]);
 
   if (url.pathname === "/download/csv") return downloadCsv(env, url);
+
+  // 港区（試験表示）。目黒区の画面とは切り離した専用ページ。デモでは null が返り 404 になる
+  if (url.pathname === "/minato" || url.pathname.startsWith("/minato/")) {
+    const mn = await handleMinato(url, env);
+    if (mn) return mn;
+  }
 
   const lb = await handleLab(env, url);       // 20260818 順序変更（/analyze を現行版へ）
   if (lb) return lb;
@@ -604,6 +611,7 @@ async function catalogPage(env) {
   return html(page("データセット一覧", `
 <h1>データセット一覧</h1>
 <p class="mut">東京都オープンデータ統合基盤（試験公開）</p>
+${env.DEMO_MODE !== "1" ? '<p class="mut">港区（試験表示・認証環境のみ）：<a href="/minato">港区のページへ</a></p>' : ""}
 
 <table>
   <thead><tr><th>データセット</th><th>期間</th><th>行数</th><th>状態</th><th>ライセンス</th><th>最終同期</th></tr></thead>

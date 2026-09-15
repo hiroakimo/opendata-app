@@ -80,3 +80,46 @@ JOIN datasets d ON d.dataset_key = o.dataset_key
 GROUP BY 1, 2
 ON CONFLICT(dataset_key, reference_date)
 DO UPDATE SET obs_rows = excluded.obs_rows;
+
+-- (6) 性別の内訳に含まれない人数の有無（注記の自動判定。町丁目・人数は持たない）
+--     方針: docs/policy/sex_residual.md
+--     D1 は compound SELECT の項数に上限があるため、UNION を使わず UPDATE を分ける。
+DELETE FROM dataset_sex_residual;
+
+INSERT INTO dataset_sex_residual (dataset_key, reference_date, has_residual)
+SELECT dataset_key, reference_date, 0 FROM dataset_periods;
+
+UPDATE dataset_sex_residual SET has_residual = 1
+ WHERE dataset_key || '|' || reference_date IN (
+   SELECT d.dataset_key || '|' || o.reference_date
+     FROM observations_noage o
+     JOIN datasets d ON d.muni_code = o.muni_code AND d.granularity = 'noage'
+    WHERE o.measure = 'population' AND o.sex = 'unknown' AND o.value > 0);
+
+UPDATE dataset_sex_residual SET has_residual = 1
+ WHERE dataset_key || '|' || reference_date IN (
+   SELECT dataset_key || '|' || reference_date
+     FROM observations_age5
+    WHERE measure = 'population' AND sex = 'unknown' AND value > 0);
+
+UPDATE dataset_sex_residual SET has_residual = 1
+ WHERE dataset_key || '|' || reference_date IN (
+   SELECT d.dataset_key || '|' || x.reference_date
+     FROM (SELECT muni_code, key_code, reference_date, age_class,
+                  SUM(CASE WHEN sex = 'total' THEN value END) AS t,
+                  SUM(CASE WHEN sex IN ('male', 'female') THEN value END) AS mf
+             FROM observations_5y WHERE measure = 'population'
+            GROUP BY 1, 2, 3, 4) x
+     JOIN datasets d ON d.muni_code = x.muni_code AND d.granularity = '5y'
+    WHERE x.t != x.mf);
+
+UPDATE dataset_sex_residual SET has_residual = 1
+ WHERE dataset_key || '|' || reference_date IN (
+   SELECT d.dataset_key || '|' || x.reference_date
+     FROM (SELECT muni_code, key_code, reference_date, age_class,
+                  SUM(CASE WHEN sex = 'total' THEN value END) AS t,
+                  SUM(CASE WHEN sex IN ('male', 'female') THEN value END) AS mf
+             FROM observations_1y
+            GROUP BY 1, 2, 3, 4) x
+     JOIN datasets d ON d.muni_code = x.muni_code AND d.granularity = '1y'
+    WHERE x.t != x.mf);
