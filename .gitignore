@@ -7,3 +7,7 @@
 dist/
 
 .tmpcheck/
+
+work/
+__pycache__/
+*.bak

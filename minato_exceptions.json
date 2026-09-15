@@ -1,0 +1,23 @@
+{
+  "_comment": "港区CKAN（jinko-chochomokubetsu）の既知の不整合。原本は書き換えず、ここに登録した行だけを異常フラグ付きで通す。",
+  "aliases": [
+    {
+      "id": "minato-alias-2005-08-roppongi5",
+      "alias": "六本木5目",
+      "canonical": "六本木五丁目",
+      "dates": ["2005-08-01"],
+      "note": "2005年8月分のみ町丁目名が「六本木5目」と記載されている。前後月は「六本木五丁目」。"
+    }
+  ],
+  "row_exceptions": [
+    {
+      "id": "minato-2008-01-atago2",
+      "reference_date": "2008-01-01",
+      "town": "愛宕二丁目",
+      "kind": "sum_mismatch",
+      "reported": {"male": 100, "female": 107, "total": 2},
+      "treatment": "keep_reported_flag",
+      "note": "人口合計(2)が男+女(207)を下回る。原本の値のまま保持し、異常フラグを付け、性別不明の導出から除外する。"
+    }
+  ]
+}

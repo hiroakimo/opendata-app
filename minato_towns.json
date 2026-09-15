@@ -1,0 +1,712 @@
+{
+  "muni_code": "131032",
+  "built_from": "20260901",
+  "no_chome": [
+    "麻布狸穴町",
+    "麻布永坂町"
+  ],
+  "towns": [
+    {
+      "town": "芝一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝",
+      "chome": 1
+    },
+    {
+      "town": "芝二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝",
+      "chome": 2
+    },
+    {
+      "town": "芝三丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝",
+      "chome": 3
+    },
+    {
+      "town": "芝四丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝",
+      "chome": 4
+    },
+    {
+      "town": "芝五丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝",
+      "chome": 5
+    },
+    {
+      "town": "海岸一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "海岸",
+      "chome": 1
+    },
+    {
+      "town": "東新橋一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "東新橋",
+      "chome": 1
+    },
+    {
+      "town": "東新橋二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "東新橋",
+      "chome": 2
+    },
+    {
+      "town": "新橋一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "新橋",
+      "chome": 1
+    },
+    {
+      "town": "新橋二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "新橋",
+      "chome": 2
+    },
+    {
+      "town": "新橋三丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "新橋",
+      "chome": 3
+    },
+    {
+      "town": "新橋四丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "新橋",
+      "chome": 4
+    },
+    {
+      "town": "新橋五丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "新橋",
+      "chome": 5
+    },
+    {
+      "town": "新橋六丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "新橋",
+      "chome": 6
+    },
+    {
+      "town": "西新橋一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "西新橋",
+      "chome": 1
+    },
+    {
+      "town": "西新橋二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "西新橋",
+      "chome": 2
+    },
+    {
+      "town": "西新橋三丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "西新橋",
+      "chome": 3
+    },
+    {
+      "town": "三田一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "三田",
+      "chome": 1
+    },
+    {
+      "town": "三田二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "三田",
+      "chome": 2
+    },
+    {
+      "town": "三田三丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "三田",
+      "chome": 3
+    },
+    {
+      "town": "浜松町一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "浜松町",
+      "chome": 1
+    },
+    {
+      "town": "浜松町二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "浜松町",
+      "chome": 2
+    },
+    {
+      "town": "芝大門一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝大門",
+      "chome": 1
+    },
+    {
+      "town": "芝大門二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝大門",
+      "chome": 2
+    },
+    {
+      "town": "芝公園一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝公園",
+      "chome": 1
+    },
+    {
+      "town": "芝公園二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝公園",
+      "chome": 2
+    },
+    {
+      "town": "芝公園三丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝公園",
+      "chome": 3
+    },
+    {
+      "town": "芝公園四丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "芝公園",
+      "chome": 4
+    },
+    {
+      "town": "虎ノ門一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "虎ノ門",
+      "chome": 1
+    },
+    {
+      "town": "虎ノ門二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "虎ノ門",
+      "chome": 2
+    },
+    {
+      "town": "虎ノ門三丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "虎ノ門",
+      "chome": 3
+    },
+    {
+      "town": "虎ノ門四丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "虎ノ門",
+      "chome": 4
+    },
+    {
+      "town": "虎ノ門五丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "虎ノ門",
+      "chome": 5
+    },
+    {
+      "town": "愛宕一丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "愛宕",
+      "chome": 1
+    },
+    {
+      "town": "愛宕二丁目",
+      "district": "芝地区総合支所管内",
+      "town_name": "愛宕",
+      "chome": 2
+    },
+    {
+      "town": "麻布狸穴町",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布狸穴町",
+      "chome": null
+    },
+    {
+      "town": "麻布永坂町",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布永坂町",
+      "chome": null
+    },
+    {
+      "town": "南麻布一丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "南麻布",
+      "chome": 1
+    },
+    {
+      "town": "南麻布二丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "南麻布",
+      "chome": 2
+    },
+    {
+      "town": "南麻布三丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "南麻布",
+      "chome": 3
+    },
+    {
+      "town": "南麻布四丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "南麻布",
+      "chome": 4
+    },
+    {
+      "town": "南麻布五丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "南麻布",
+      "chome": 5
+    },
+    {
+      "town": "元麻布一丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "元麻布",
+      "chome": 1
+    },
+    {
+      "town": "元麻布二丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "元麻布",
+      "chome": 2
+    },
+    {
+      "town": "元麻布三丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "元麻布",
+      "chome": 3
+    },
+    {
+      "town": "西麻布一丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "西麻布",
+      "chome": 1
+    },
+    {
+      "town": "西麻布二丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "西麻布",
+      "chome": 2
+    },
+    {
+      "town": "西麻布三丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "西麻布",
+      "chome": 3
+    },
+    {
+      "town": "西麻布四丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "西麻布",
+      "chome": 4
+    },
+    {
+      "town": "六本木一丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "六本木",
+      "chome": 1
+    },
+    {
+      "town": "六本木二丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "六本木",
+      "chome": 2
+    },
+    {
+      "town": "六本木三丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "六本木",
+      "chome": 3
+    },
+    {
+      "town": "六本木四丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "六本木",
+      "chome": 4
+    },
+    {
+      "town": "六本木五丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "六本木",
+      "chome": 5
+    },
+    {
+      "town": "六本木六丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "六本木",
+      "chome": 6
+    },
+    {
+      "town": "六本木七丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "六本木",
+      "chome": 7
+    },
+    {
+      "town": "麻布台一丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布台",
+      "chome": 1
+    },
+    {
+      "town": "麻布台二丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布台",
+      "chome": 2
+    },
+    {
+      "town": "麻布台三丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布台",
+      "chome": 3
+    },
+    {
+      "town": "麻布十番一丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布十番",
+      "chome": 1
+    },
+    {
+      "town": "麻布十番二丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布十番",
+      "chome": 2
+    },
+    {
+      "town": "麻布十番三丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布十番",
+      "chome": 3
+    },
+    {
+      "town": "麻布十番四丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "麻布十番",
+      "chome": 4
+    },
+    {
+      "town": "東麻布一丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "東麻布",
+      "chome": 1
+    },
+    {
+      "town": "東麻布二丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "東麻布",
+      "chome": 2
+    },
+    {
+      "town": "東麻布三丁目",
+      "district": "麻布地区総合支所管内",
+      "town_name": "東麻布",
+      "chome": 3
+    },
+    {
+      "town": "元赤坂一丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "元赤坂",
+      "chome": 1
+    },
+    {
+      "town": "元赤坂二丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "元赤坂",
+      "chome": 2
+    },
+    {
+      "town": "赤坂一丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 1
+    },
+    {
+      "town": "赤坂二丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 2
+    },
+    {
+      "town": "赤坂三丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 3
+    },
+    {
+      "town": "赤坂四丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 4
+    },
+    {
+      "town": "赤坂五丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 5
+    },
+    {
+      "town": "赤坂六丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 6
+    },
+    {
+      "town": "赤坂七丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 7
+    },
+    {
+      "town": "赤坂八丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 8
+    },
+    {
+      "town": "赤坂九丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "赤坂",
+      "chome": 9
+    },
+    {
+      "town": "南青山一丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "南青山",
+      "chome": 1
+    },
+    {
+      "town": "南青山二丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "南青山",
+      "chome": 2
+    },
+    {
+      "town": "南青山三丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "南青山",
+      "chome": 3
+    },
+    {
+      "town": "南青山四丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "南青山",
+      "chome": 4
+    },
+    {
+      "town": "南青山五丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "南青山",
+      "chome": 5
+    },
+    {
+      "town": "南青山六丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "南青山",
+      "chome": 6
+    },
+    {
+      "town": "南青山七丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "南青山",
+      "chome": 7
+    },
+    {
+      "town": "北青山一丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "北青山",
+      "chome": 1
+    },
+    {
+      "town": "北青山二丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "北青山",
+      "chome": 2
+    },
+    {
+      "town": "北青山三丁目",
+      "district": "赤坂地区総合支所管内",
+      "town_name": "北青山",
+      "chome": 3
+    },
+    {
+      "town": "三田四丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "三田",
+      "chome": 4
+    },
+    {
+      "town": "三田五丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "三田",
+      "chome": 5
+    },
+    {
+      "town": "高輪一丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "高輪",
+      "chome": 1
+    },
+    {
+      "town": "高輪二丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "高輪",
+      "chome": 2
+    },
+    {
+      "town": "高輪三丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "高輪",
+      "chome": 3
+    },
+    {
+      "town": "高輪四丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "高輪",
+      "chome": 4
+    },
+    {
+      "town": "白金一丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金",
+      "chome": 1
+    },
+    {
+      "town": "白金二丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金",
+      "chome": 2
+    },
+    {
+      "town": "白金三丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金",
+      "chome": 3
+    },
+    {
+      "town": "白金四丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金",
+      "chome": 4
+    },
+    {
+      "town": "白金五丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金",
+      "chome": 5
+    },
+    {
+      "town": "白金六丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金",
+      "chome": 6
+    },
+    {
+      "town": "白金台一丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金台",
+      "chome": 1
+    },
+    {
+      "town": "白金台二丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金台",
+      "chome": 2
+    },
+    {
+      "town": "白金台三丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金台",
+      "chome": 3
+    },
+    {
+      "town": "白金台四丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金台",
+      "chome": 4
+    },
+    {
+      "town": "白金台五丁目",
+      "district": "高輪地区総合支所管内",
+      "town_name": "白金台",
+      "chome": 5
+    },
+    {
+      "town": "芝浦一丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "芝浦",
+      "chome": 1
+    },
+    {
+      "town": "芝浦二丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "芝浦",
+      "chome": 2
+    },
+    {
+      "town": "芝浦三丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "芝浦",
+      "chome": 3
+    },
+    {
+      "town": "芝浦四丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "芝浦",
+      "chome": 4
+    },
+    {
+      "town": "海岸二丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "海岸",
+      "chome": 2
+    },
+    {
+      "town": "海岸三丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "海岸",
+      "chome": 3
+    },
+    {
+      "town": "港南一丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "港南",
+      "chome": 1
+    },
+    {
+      "town": "港南二丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "港南",
+      "chome": 2
+    },
+    {
+      "town": "港南三丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "港南",
+      "chome": 3
+    },
+    {
+      "town": "港南四丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "港南",
+      "chome": 4
+    },
+    {
+      "town": "港南五丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "港南",
+      "chome": 5
+    },
+    {
+      "town": "台場一丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "台場",
+      "chome": 1
+    },
+    {
+      "town": "台場二丁目",
+      "district": "芝浦港南地区総合支所管内",
+      "town_name": "台場",
+      "chome": 2
+    }
+  ]
+}
